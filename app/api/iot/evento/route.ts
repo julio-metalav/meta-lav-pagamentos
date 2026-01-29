@@ -19,7 +19,6 @@ export async function POST(req: Request) {
     return json(400, { ok: false, error: "headers_missing" });
   }
 
-  // IMPORTANTE: rawBody precisa ser EXATO (mesmos bytes assinados)
   const rawBody = await req.text();
 
   const { ok: hmacOk, debug } = verifyHmac({
@@ -31,7 +30,6 @@ export async function POST(req: Request) {
 
   if (!hmacOk) {
     const debugOn = process.env.DEBUG_HMAC === "1";
-
     console.log("[IOT_EVENTO] invalid_hmac", {
       serial: debug.serial,
       serialNorm: debug.serialNorm,
@@ -46,14 +44,10 @@ export async function POST(req: Request) {
       rawBodyHead: debug.rawBodyHead,
     });
 
-    return json(401, {
-      ok: false,
-      error: "invalid_hmac",
-      ...(debugOn ? { debug } : {}),
-    });
+    return json(401, { ok: false, error: "invalid_hmac", ...(debugOn ? { debug } : {}) });
   }
 
-  // Parse JSON (o gateway deve mandar JSON válido)
+  // JSON válido obrigatório
   let payload: any;
   try {
     payload = JSON.parse(rawBody);
@@ -62,38 +56,68 @@ export async function POST(req: Request) {
   }
 
   const tipo = String(payload?.type ?? "");
-  if (!tipo) {
-    return json(400, { ok: false, error: "missing_type" });
-  }
+  if (!tipo) return json(400, { ok: false, error: "missing_type" });
 
   const tsGw = Number.parseInt(String(ts), 10);
-  if (!Number.isFinite(tsGw)) {
-    return json(400, { ok: false, error: "invalid_ts" });
+  if (!Number.isFinite(tsGw)) return json(400, { ok: false, error: "invalid_ts" });
+
+  const admin = supabaseAdmin();
+
+  // 1) grava sempre o evento bruto
+  const { data: evento, error: evErr } = await admin
+    .from("iot_eventos")
+    .insert({
+      gw_serial: serial,
+      ts_gw: tsGw,
+      tipo,
+      payload,
+      raw_body: rawBody,
+      hmac_ok: true,
+    })
+    .select("id, created_at")
+    .single();
+
+  if (evErr || !evento) {
+    return json(500, { ok: false, error: "db_error", detail: evErr?.message ?? "insert_event_failed" });
   }
 
-  // Insere no banco
-  try {
-    const admin = supabaseAdmin();
+  // 2) se for PULSE, cria ciclos derivados
+  if (tipo === "PULSE") {
+    const pulsesRaw = payload?.payload?.pulses;
+    const pulses = Number.parseInt(String(pulsesRaw ?? "1"), 10);
 
-    const { data, error } = await admin
-      .from("iot_eventos")
-      .insert({
-        gw_serial: serial,
-        ts_gw: tsGw,
-        tipo,
-        payload,
-        raw_body: rawBody,
-        hmac_ok: true,
-      })
-      .select("id, created_at")
-      .single();
-
-    if (error) {
-      return json(500, { ok: false, error: "db_error", detail: error.message });
+    if (!Number.isFinite(pulses) || pulses <= 0) {
+      return json(400, { ok: false, error: "invalid_pulses", evento_id: evento.id });
     }
 
-    return json(200, { ok: true, id: data.id, created_at: data.created_at });
-  } catch (e: any) {
-    return json(500, { ok: false, error: "server_error", detail: String(e?.message ?? e) });
+    // gera N linhas (1 por ciclo). Mantém simples e auditável.
+    const rows = Array.from({ length: pulses }, () => ({
+      gw_serial: serial,
+      ts_gw: tsGw,
+      ciclos: 1,
+      origem: "PULSE",
+      evento_id: evento.id,
+    }));
+
+    const { error: cErr } = await admin.from("iot_ciclos").insert(rows);
+
+    if (cErr) {
+      return json(500, {
+        ok: false,
+        error: "db_error",
+        detail: cErr.message,
+        evento_id: evento.id,
+      });
+    }
+
+    return json(200, {
+      ok: true,
+      evento_id: evento.id,
+      created_at: evento.created_at,
+      ciclos_criados: pulses,
+    });
   }
+
+  // BUSY (por enquanto só log)
+  return json(200, { ok: true, evento_id: evento.id, created_at: evento.created_at });
 }
