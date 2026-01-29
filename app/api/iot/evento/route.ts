@@ -1,71 +1,99 @@
+﻿// app/api/iot/evento/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { authenticateGateway } from "@/lib/iotAuth";
+import { verifyHmac } from "@/lib/libiot-hmac";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-function bad(message: string, status = 400) {
-  return NextResponse.json({ ok: false, error: message }, { status });
+function json(status: number, body: any) {
+  return NextResponse.json(body, { status });
 }
 
 export async function POST(req: Request) {
+  const serial = req.headers.get("x-gw-serial") || "";
+  const ts = req.headers.get("x-gw-ts") || "";
+  const sign = req.headers.get("x-gw-sign") || "";
+
+  if (!serial || !ts || !sign) {
+    return json(400, { ok: false, error: "headers_missing" });
+  }
+
+  // IMPORTANTE: rawBody precisa ser EXATO (mesmos bytes assinados)
+  const rawBody = await req.text();
+
+  const { ok: hmacOk, debug } = verifyHmac({
+    serial,
+    ts,
+    receivedHex: sign,
+    rawBody,
+  });
+
+  if (!hmacOk) {
+    const debugOn = process.env.DEBUG_HMAC === "1";
+
+    console.log("[IOT_EVENTO] invalid_hmac", {
+      serial: debug.serial,
+      serialNorm: debug.serialNorm,
+      ts: debug.ts,
+      rawBodyLen: debug.rawBodyLen,
+      secretSource: debug.secretSource,
+      expectedHead: debug.expectedHead,
+      receivedHead: debug.receivedHead,
+      envHasGeneric: debug.envHasGeneric,
+      envHasPerSerial: debug.envHasPerSerial,
+      baseHead: debug.baseHead,
+      rawBodyHead: debug.rawBodyHead,
+    });
+
+    return json(401, {
+      ok: false,
+      error: "invalid_hmac",
+      ...(debugOn ? { debug } : {}),
+    });
+  }
+
+  // Parse JSON (o gateway deve mandar JSON válido)
+  let payload: any;
   try {
-    // 1) rawBody precisa ser exatamente o mesmo texto assinado no HMAC
-    const rawBody = await req.text();
+    payload = JSON.parse(rawBody);
+  } catch {
+    return json(400, { ok: false, error: "invalid_json" });
+  }
 
-    // 2) Auth HMAC
-    const auth = authenticateGateway(req, rawBody);
-    if (!auth.ok) return NextResponse.json(auth, { status: 401 });
+  const tipo = String(payload?.type ?? "");
+  if (!tipo) {
+    return json(400, { ok: false, error: "missing_type" });
+  }
 
-    const serial = auth.serial;
+  const tsGw = Number.parseInt(String(ts), 10);
+  if (!Number.isFinite(tsGw)) {
+    return json(400, { ok: false, error: "invalid_ts" });
+  }
+
+  // Insere no banco
+  try {
     const admin = supabaseAdmin();
 
-    // 3) Parse JSON (depois de autenticar)
-    let body: any;
-    try {
-      body = JSON.parse(rawBody || "{}");
-    } catch {
-      return bad("JSON inválido no body");
+    const { data, error } = await admin
+      .from("iot_eventos")
+      .insert({
+        gw_serial: serial,
+        ts_gw: tsGw,
+        tipo,
+        payload,
+        raw_body: rawBody,
+        hmac_ok: true,
+      })
+      .select("id, created_at")
+      .single();
+
+    if (error) {
+      return json(500, { ok: false, error: "db_error", detail: error.message });
     }
 
-    const tipo = String(body?.tipo ?? body?.type ?? "").trim();
-    if (!tipo) return bad("tipo é obrigatório");
-
-    const maquina_id =
-      body?.maquina_id ?? body?.machine_id ?? body?.condominio_maquinas_id ?? null;
-
-    const payload = body?.payload ?? {};
-
-    // 4) Confirma que o gateway já existe (NÃO tenta criar aqui, porque condominio_id é NOT NULL)
-    const { data: gw, error: gwErr } = await admin
-      .from("gateways")
-      .select("id, serial, condominio_id")
-      .eq("serial", serial)
-      .maybeSingle();
-
-    if (gwErr) return bad(gwErr.message, 500);
-
-    if (!gw?.id) {
-      return bad(
-        `Gateway '${serial}' não cadastrado. Cadastre em 'gateways' com condominio_id antes de enviar eventos.`,
-        409
-      );
-    }
-
-    // 5) Por enquanto, NÃO grava evento (evita chutar tabela/colunas).
-    //    Esse endpoint fica "aceitando" eventos para destravar o deploy.
-    return NextResponse.json({
-      ok: true,
-      serial,
-      gateway_id: gw.id,
-      condominio_id: gw.condominio_id,
-      tipo,
-      maquina_id,
-      payload,
-      stored: false,
-    });
+    return json(200, { ok: true, id: data.id, created_at: data.created_at });
   } catch (e: any) {
-    return bad(e?.message || "Erro interno", 500);
+    return json(500, { ok: false, error: "server_error", detail: String(e?.message ?? e) });
   }
 }
