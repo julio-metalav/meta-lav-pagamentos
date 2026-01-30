@@ -15,11 +15,15 @@ export type VerifyDebug = {
   ts: string;
   rawBodyLen: number;
 
-  // compat com logs antigos
+  // compat com logs
   secretSource: "per-serial" | "generic" | "missing";
   expectedHead: string;
   receivedHead: string;
   envHasGeneric: boolean;
+  envHasPerSerial: boolean;
+
+  baseHead: string;
+  rawBodyHead: string;
 
   // extras (sem vazar secret)
   envKey: string;
@@ -40,7 +44,7 @@ export function normalizeGatewaySerial(serial: string) {
   return (serial || "").replace(/[^A-Za-z0-9_]/g, "_");
 }
 
-function head(s: string, n = 12) {
+function head(s: string, n = 24) {
   return (s || "").slice(0, n);
 }
 
@@ -53,14 +57,13 @@ export function verifyHmac(args: VerifyArgs): VerifyResult {
   const serialNorm = normalizeGatewaySerial(serial);
 
   const perSerialKey = `IOT_HMAC_SECRET__${serialNorm}`;
-  const genericKey = `IOT_HMAC_SECRET`; // fallback (se existir), sem IOT_SHARED_SECRET
+  const genericKey = `IOT_HMAC_SECRET`; // fallback DEV (não é o IOT_SHARED_SECRET)
 
   const perSerialSecret = process.env[perSerialKey];
   const genericSecret = process.env[genericKey];
 
-  // prioridade: per-serial; fallback: generic (se alguém usar em dev)
-  const secret =
-    perSerialSecret ?? genericSecret ?? undefined;
+  // prioridade: per-serial; fallback: generic
+  const secret = perSerialSecret ?? genericSecret ?? undefined;
 
   const secretSource: VerifyDebug["secretSource"] =
     perSerialSecret ? "per-serial" : genericSecret ? "generic" : "missing";
@@ -80,16 +83,19 @@ export function verifyHmac(args: VerifyArgs): VerifyResult {
     rawBodyLen: Buffer.byteLength(rawBody, "utf8"),
 
     secretSource,
-    expectedHead: head(expected),
-    receivedHead: head(receivedHex),
+    expectedHead: head(expected, 16),
+    receivedHead: head(receivedHex, 16),
     envHasGeneric: !!genericSecret,
+    envHasPerSerial: !!perSerialSecret,
+
+    baseHead: head(base, 48),
+    rawBodyHead: head(rawBody, 48),
 
     envKey: perSerialKey,
     hasSecret: !!secret,
     base,
   };
 
-  // Falhas básicas
   if (!serial || !ts || !receivedHex || !secret) {
     return { ok: false, debug };
   }
