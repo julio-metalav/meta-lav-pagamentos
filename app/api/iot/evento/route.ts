@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { verifyHmac } from "@/lib/iot-hmac";
+import { verifyHmac } from "@/lib/libiot-hmac";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 function json(status: number, body: any) {
