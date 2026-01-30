@@ -9,11 +9,15 @@ type VerifyArgs = {
 };
 
 export type VerifyDebug = {
-  serial_raw: string;
-  serial_norm: string;
-  env_key: string;
-  has_secret: boolean;
+  // nomes esperados pelas rotas (evento/poll/ack/heartbeat)
+  serial: string;         // serial cru do header
+  serialNorm: string;     // serial normalizado para env var
   ts: string;
+  rawBodyLen: number;
+
+  // extras úteis (sem vazar segredo)
+  envKey: string;
+  hasSecret: boolean;
   base: string;
   expected?: string;
   received?: string;
@@ -33,28 +37,29 @@ export function normalizeGatewaySerial(serial: string) {
 }
 
 export function verifyHmac(args: VerifyArgs): VerifyResult {
-  const serialRaw = (args.serial || "").trim();
+  const serial = (args.serial || "").trim();
   const ts = (args.ts || "").trim();
   const receivedHex = (args.receivedHex || "").trim().toLowerCase();
   const rawBody = args.rawBody ?? "";
 
-  const serialNorm = normalizeGatewaySerial(serialRaw);
+  const serialNorm = normalizeGatewaySerial(serial);
   const envKey = `IOT_HMAC_SECRET__${serialNorm}`;
-
   const base = `${ts}.${rawBody}`;
+
   const secret = process.env[envKey];
 
   const debug: VerifyDebug = {
-    serial_raw: serialRaw,
-    serial_norm: serialNorm,
-    env_key: envKey,
-    has_secret: !!secret,
+    serial,
+    serialNorm,
     ts,
+    rawBodyLen: Buffer.byteLength(rawBody, "utf8"),
+    envKey,
+    hasSecret: !!secret,
     base,
+    received: receivedHex || "",
   };
 
-  if (!serialRaw || !ts || !receivedHex || !secret) {
-    debug.received = receivedHex || "";
+  if (!serial || !ts || !receivedHex || !secret) {
     return { ok: false, debug };
   }
 
@@ -64,14 +69,10 @@ export function verifyHmac(args: VerifyArgs): VerifyResult {
     .digest("hex");
 
   debug.expected = expected;
-  debug.received = receivedHex;
 
   const a = Buffer.from(expected, "hex");
   const b = Buffer.from(receivedHex, "hex");
-
-  if (a.length !== b.length) {
-    return { ok: false, debug };
-  }
+  if (a.length !== b.length) return { ok: false, debug };
 
   const ok = crypto.timingSafeEqual(a, b);
   return { ok, debug };
