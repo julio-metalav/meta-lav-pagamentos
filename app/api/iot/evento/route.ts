@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { verifyHmac } from "@/lib/libiot-hmac";
+import { verifyHmac } from "@/lib/iot-hmac";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 function json(status: number, body: any) {
@@ -44,7 +44,11 @@ export async function POST(req: Request) {
       rawBodyHead: debug.rawBodyHead,
     });
 
-    return json(401, { ok: false, error: "invalid_hmac", ...(debugOn ? { debug } : {}) });
+    return json(401, {
+      ok: false,
+      error: "invalid_hmac",
+      ...(debugOn ? { debug } : {}),
+    });
   }
 
   // JSON válido obrigatório
@@ -78,7 +82,11 @@ export async function POST(req: Request) {
     .single();
 
   if (evErr || !evento) {
-    return json(500, { ok: false, error: "db_error", detail: evErr?.message ?? "insert_event_failed" });
+    return json(500, {
+      ok: false,
+      error: "db_error",
+      detail: evErr?.message ?? "insert_event_failed",
+    });
   }
 
   // 2) se for PULSE, cria ciclos derivados
