@@ -8,11 +8,20 @@ type VerifyArgs = {
   rawBody: string;
 };
 
-type VerifyResult = {
-  ok: boolean;
+export type VerifyDebug = {
+  serial_raw: string;
+  serial_norm: string;
+  env_key: string;
+  has_secret: boolean;
+  ts: string;
+  base: string;
   expected?: string;
-  base?: string;
-  envKey?: string;
+  received?: string;
+};
+
+export type VerifyResult = {
+  ok: boolean;
+  debug: VerifyDebug;
 };
 
 /**
@@ -29,33 +38,41 @@ export function verifyHmac(args: VerifyArgs): VerifyResult {
   const receivedHex = (args.receivedHex || "").trim().toLowerCase();
   const rawBody = args.rawBody ?? "";
 
-  if (!serialRaw || !ts || !receivedHex) {
-    return { ok: false };
-  }
-
-  const normalized = normalizeGatewaySerial(serialRaw);
-  const envKey = `IOT_HMAC_SECRET__${normalized}`;
-  const secret = process.env[envKey];
-
-  if (!secret) {
-    // secret não configurado no ambiente
-    return { ok: false, envKey };
-  }
+  const serialNorm = normalizeGatewaySerial(serialRaw);
+  const envKey = `IOT_HMAC_SECRET__${serialNorm}`;
 
   const base = `${ts}.${rawBody}`;
+  const secret = process.env[envKey];
+
+  const debug: VerifyDebug = {
+    serial_raw: serialRaw,
+    serial_norm: serialNorm,
+    env_key: envKey,
+    has_secret: !!secret,
+    ts,
+    base,
+  };
+
+  if (!serialRaw || !ts || !receivedHex || !secret) {
+    debug.received = receivedHex || "";
+    return { ok: false, debug };
+  }
+
   const expected = crypto
     .createHmac("sha256", secret)
     .update(base, "utf8")
     .digest("hex");
 
-  // comparação segura contra timing attack
+  debug.expected = expected;
+  debug.received = receivedHex;
+
   const a = Buffer.from(expected, "hex");
   const b = Buffer.from(receivedHex, "hex");
 
   if (a.length !== b.length) {
-    return { ok: false, expected, base, envKey };
+    return { ok: false, debug };
   }
 
   const ok = crypto.timingSafeEqual(a, b);
-  return { ok, expected, base, envKey };
+  return { ok, debug };
 }
