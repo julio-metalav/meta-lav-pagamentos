@@ -9,18 +9,22 @@ type VerifyArgs = {
 };
 
 export type VerifyDebug = {
-  // nomes esperados pelas rotas (evento/poll/ack/heartbeat)
-  serial: string;         // serial cru do header
-  serialNorm: string;     // serial normalizado para env var
+  // esperados pelos endpoints
+  serial: string;
+  serialNorm: string;
   ts: string;
   rawBodyLen: number;
 
-  // extras úteis (sem vazar segredo)
+  // compat com logs antigos
+  secretSource: "per-serial" | "generic" | "missing";
+  expectedHead: string;
+  receivedHead: string;
+  envHasGeneric: boolean;
+
+  // extras (sem vazar secret)
   envKey: string;
   hasSecret: boolean;
   base: string;
-  expected?: string;
-  received?: string;
 };
 
 export type VerifyResult = {
@@ -36,6 +40,10 @@ export function normalizeGatewaySerial(serial: string) {
   return (serial || "").replace(/[^A-Za-z0-9_]/g, "_");
 }
 
+function head(s: string, n = 12) {
+  return (s || "").slice(0, n);
+}
+
 export function verifyHmac(args: VerifyArgs): VerifyResult {
   const serial = (args.serial || "").trim();
   const ts = (args.ts || "").trim();
@@ -43,33 +51,50 @@ export function verifyHmac(args: VerifyArgs): VerifyResult {
   const rawBody = args.rawBody ?? "";
 
   const serialNorm = normalizeGatewaySerial(serial);
-  const envKey = `IOT_HMAC_SECRET__${serialNorm}`;
+
+  const perSerialKey = `IOT_HMAC_SECRET__${serialNorm}`;
+  const genericKey = `IOT_HMAC_SECRET`; // fallback (se existir), sem IOT_SHARED_SECRET
+
+  const perSerialSecret = process.env[perSerialKey];
+  const genericSecret = process.env[genericKey];
+
+  // prioridade: per-serial; fallback: generic (se alguém usar em dev)
+  const secret =
+    perSerialSecret ?? genericSecret ?? undefined;
+
+  const secretSource: VerifyDebug["secretSource"] =
+    perSerialSecret ? "per-serial" : genericSecret ? "generic" : "missing";
+
   const base = `${ts}.${rawBody}`;
 
-  const secret = process.env[envKey];
+  // expected só se tiver secret e headers mínimos
+  let expected = "";
+  if (serial && ts && receivedHex && secret) {
+    expected = crypto.createHmac("sha256", secret).update(base, "utf8").digest("hex");
+  }
 
   const debug: VerifyDebug = {
     serial,
     serialNorm,
     ts,
     rawBodyLen: Buffer.byteLength(rawBody, "utf8"),
-    envKey,
+
+    secretSource,
+    expectedHead: head(expected),
+    receivedHead: head(receivedHex),
+    envHasGeneric: !!genericSecret,
+
+    envKey: perSerialKey,
     hasSecret: !!secret,
     base,
-    received: receivedHex || "",
   };
 
+  // Falhas básicas
   if (!serial || !ts || !receivedHex || !secret) {
     return { ok: false, debug };
   }
 
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(base, "utf8")
-    .digest("hex");
-
-  debug.expected = expected;
-
+  // comparação segura
   const a = Buffer.from(expected, "hex");
   const b = Buffer.from(receivedHex, "hex");
   if (a.length !== b.length) return { ok: false, debug };
