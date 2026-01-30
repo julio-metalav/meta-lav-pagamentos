@@ -1,57 +1,28 @@
-import crypto from "crypto";
+// lib/iotAuth.ts
+import { verifyHmac } from "@/lib/libiot-hmac";
 
-export type IoTAuthResult =
-  | { ok: true; serial: string }
-  | { ok: false; status: number; error: string; debug?: any };
+type Ok = { ok: true; serial: string };
+type Fail = { ok: false; status: number; error: string };
+export type AuthResult = Ok | Fail;
 
-function bad(status: number, error: string, debug?: any): IoTAuthResult {
-  const enableDebug = process.env.IOT_DEBUG_HMAC === "true";
-  return enableDebug ? { ok: false, status, error, debug } : { ok: false, status, error };
-}
+export function authenticateGateway(req: Request, rawBody: string): AuthResult {
+  const serial = req.headers.get("x-gw-serial") || "";
+  const ts = req.headers.get("x-gw-ts") || "";
+  const sign = req.headers.get("x-gw-sign") || "";
 
-/**
- * Assinatura: HMAC(secret, `${ts}.${rawBody}`)
- * - rawBody deve ser o corpo CRU (string) lido NO route.ts (req.text()).
- */
-export function authenticateGateway(req: Request, rawBody: string): IoTAuthResult {
-  const serial = (req.headers.get("x-gw-serial") ?? "").trim();
-  const tsHeader = (req.headers.get("x-gw-ts") ?? "").trim();
-  const sign = (req.headers.get("x-gw-sign") ?? "").trim();
-
-  if (!serial) return bad(401, "Header ausente: x-gw-serial");
-  if (!tsHeader) return bad(401, "Header ausente: x-gw-ts");
-  if (!sign) return bad(401, "Header ausente: x-gw-sign");
-
-  const ts = Number(tsHeader);
-  if (!Number.isFinite(ts)) return bad(401, "Timestamp inválido");
-
-  const secret = process.env.IOT_SHARED_SECRET;
-  if (!secret) return bad(500, "IOT_SHARED_SECRET não configurado");
-
-  // Timestamp (DEV pode desligar)
-  const now = Math.floor(Date.now() / 1000);
-  const ttl = Number(process.env.IOT_HMAC_TTL_SECONDS ?? "3600");
-
-  if (process.env.IOT_DISABLE_TIMESTAMP_CHECK !== "true") {
-    const diff = Math.abs(now - ts);
-    if (diff > ttl) {
-      return bad(401, `Timestamp fora da janela (replay/clock skew). now=${now} ts=${ts} diff=${diff}s ttl=${ttl}s`);
-    }
+  if (!serial || !ts || !sign) {
+    return { ok: false, status: 400, error: "headers_missing" };
   }
 
-  const base = `${ts}.${rawBody ?? ""}`;
-  const expected = crypto.createHmac("sha256", secret).update(base).digest("hex");
+  const { ok } = verifyHmac({
+    serial,
+    ts,
+    receivedHex: sign,
+    rawBody,
+  });
 
-  if (expected !== sign) {
-    return bad(401, "Assinatura inválida (HMAC)", {
-      ts,
-      serial,
-      rawBody,
-      base,
-      expected,
-      received: sign,
-      secret_first6: secret.slice(0, 6),
-    });
+  if (!ok) {
+    return { ok: false, status: 401, error: "invalid_hmac" };
   }
 
   return { ok: true, serial };
