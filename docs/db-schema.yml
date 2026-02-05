@@ -1,0 +1,219 @@
+# docs/db-schema.yml
+# Meta-Lav Pagamentos — Contrato de Dados (Fonte Única)
+# Regra: Tabelas PT-BR = runtime (canônicas). Tabelas EN = legado/read-only.
+
+meta:
+  project: "meta-lav-pagamentos"
+  timezone: "UTC"
+  source_of_truth: "pt-br"
+  last_updated: "2026-02-05"
+
+conventions:
+  canonical_schema: "public"
+  canonical_language: "pt-br"
+  legacy_language: "en"
+  rule:
+    - "Nunca usar tabelas legacy (EN) no runtime."
+    - "Toda query/endpoint deve usar nomes deste arquivo."
+    - "Enum: só valores listados aqui (nada de chute)."
+    - "Tabelas PT-BR são a fonte única da verdade no runtime."
+
+tables:
+  # ----------------------------
+  # CANÔNICAS (PT-BR) — RUNTIME
+  # ----------------------------
+
+  ciclos:
+    canonical: true
+    runtime: true
+    table: "ciclos"
+    purpose: "Estado do ciclo por máquina (AGUARDANDO_LIBERACAO -> LIBERADO -> EM_USO -> FINALIZADO)"
+    primary_key: ["id"]
+    foreign_keys:
+      - { column: "condominio_id", references: "condominios.id" }
+      - { column: "maquina_id", references: "condominio_maquinas.id" }
+      - { column: "pagamento_id", references: "pagamentos.id" }
+    enums:
+      status:
+        enum_name: "ciclo_status"
+        values:
+          - "AGUARDANDO_LIBERACAO"
+          - "LIBERADO"
+          - "EM_USO"
+          - "FINALIZADO"
+        note: "Se existirem outros valores reais no banco, atualizar aqui (via query enum_range)."
+    columns:
+      id: { type: "uuid", required: true }
+      pagamento_id: { type: "uuid", required: false }
+      condominio_id: { type: "uuid", required: true }
+      maquina_id: { type: "uuid", required: true }
+      status: { type: "ciclo_status", required: true }
+      pulso_enviado_at: { type: "timestamptz", required: false }
+      busy_on_at: { type: "timestamptz", required: false }
+      busy_off_at: { type: "timestamptz", required: false }
+      eta_livre_at: { type: "timestamptz", required: false }
+      pulso_confirmado: { type: "bool", required: false }
+      created_at: { type: "timestamptz", required: true }
+      updated_at: { type: "timestamptz", required: true }
+    examples:
+      orphan_released_no_busy_on: |
+        select id, created_at, status, pulso_enviado_at, busy_on_at, busy_off_at, maquina_id
+        from ciclos
+        where status = 'LIBERADO'
+          and pulso_enviado_at is not null
+          and busy_on_at is null
+        order by pulso_enviado_at desc;
+
+  eventos_iot:
+    canonical: true
+    runtime: true
+    table: "eventos_iot"
+    purpose: "Log canônico de eventos IoT (PULSO/BUSY_ON/BUSY_OFF) ligado ao gateway e à máquina (condominio_maquinas.id)"
+    primary_key: ["id"]
+    foreign_keys:
+      - { column: "gateway_id", references: "gateways.id" }
+      - { column: "maquina_id", references: "condominio_maquinas.id" }
+    enums:
+      tipo:
+        enum_name: "iot_evento_tipo"
+        values:
+          - "PULSO_ENVIADO"
+          - "BUSY_ON"
+          - "BUSY_OFF"
+          - "HEARTBEAT"
+          - "ERRO"
+        note: "Se o banco tiver mais valores, atualizar aqui."
+    columns:
+      id: { type: "uuid", required: true }
+      gateway_id: { type: "uuid", required: true }
+      maquina_id: { type: "uuid", required: false }
+      tipo: { type: "iot_evento_tipo", required: true }
+      payload: { type: "jsonb", required: true }
+      created_at: { type: "timestamptz", required: true }
+    examples:
+      last_50: |
+        select id, gateway_id, maquina_id, tipo, payload, created_at
+        from eventos_iot
+        order by created_at desc
+        limit 50;
+
+  iot_commands:
+    canonical: true
+    runtime: true
+    table: "iot_commands"
+    purpose: "Fila de comandos para gateways (pulso). Vínculo com ciclo via payload.ciclo_id"
+    primary_key: ["id"]
+    foreign_keys:
+      - { column: "gateway_id", references: "gateways.id" }
+      - { column: "condominio_maquinas_id", references: "condominio_maquinas.id" }
+    columns:
+      id: { type: "uuid", required: true }
+      gateway_id: { type: "uuid", required: true }
+      cmd_id: { type: "uuid", required: true }
+      status: { type: "text", required: true }
+      tipo: { type: "text", required: false }
+      payload: { type: "jsonb", required: true }
+      condominio_maquinas_id: { type: "uuid", required: false }
+      created_at: { type: "timestamptz", required: true }
+
+  condominio_maquinas:
+    canonical: true
+    runtime: true
+    table: "condominio_maquinas"
+    purpose: "Cadastro de máquinas por condomínio (inclui identificador_local tipo LAV-01/SEC-01)"
+    primary_key: ["id"]
+    foreign_keys:
+      - { column: "condominio_id", references: "condominios.id" }
+      - { column: "gateway_id", references: "gateways.id" }
+    enums:
+      tipo_maquina:
+        enum_name: "tipo_maquina"
+        values:
+          - "lavadora"
+          - "secadora"
+    columns:
+      id: { type: "uuid", required: true }
+      condominio_id: { type: "uuid", required: true }
+      gateway_id: { type: "uuid", required: true }
+      identificador_local: { type: "text", required: true }
+      tipo_maquina: { type: "tipo_maquina", required: true }
+
+  gateways:
+    canonical: true
+    runtime: true
+    table: "gateways"
+    purpose: "Cadastro de gateways (serial, last_seen, condominio_id)"
+    primary_key: ["id"]
+    foreign_keys:
+      - { column: "condominio_id", references: "condominios.id" }
+    columns:
+      id: { type: "uuid", required: true }
+      serial: { type: "text", required: true }
+      condominio_id: { type: "uuid", required: true }
+      last_seen: { type: "timestamptz", required: false }
+
+  pos_devices:
+    canonical: true
+    runtime: true
+    table: "pos_devices"
+    purpose: "Cadastro de POS (Stone/Sunmi) por condomínio"
+    primary_key: ["id"]
+    foreign_keys:
+      - { column: "condominio_id", references: "condominios.id" }
+    columns:
+      id: { type: "uuid", required: true }
+      serial: { type: "text", required: true }
+      condominio_id: { type: "uuid", required: true }
+
+  pagamentos:
+    canonical: true
+    runtime: true
+    table: "pagamentos"
+    purpose: "Pagamentos (Pix/cartão) e vínculo com ciclo(s)"
+    primary_key: ["id"]
+    foreign_keys:
+      - { column: "condominio_id", references: "condominios.id" }
+    columns:
+      id: { type: "uuid", required: true }
+      condominio_id: { type: "uuid", required: true }
+      metodo: { type: "text", required: true }
+      valor: { type: "numeric", required: true }
+      status: { type: "text", required: true }
+      created_at: { type: "timestamptz", required: true }
+
+  # ----------------------------
+  # LEGADO (EN) — READ ONLY
+  # ----------------------------
+
+  iot_events:
+    canonical: false
+    runtime: false
+    read_only: true
+    table: "iot_events"
+    purpose: "LEGADO (EN). Não usar no runtime. Logs antigos/compatibilidade."
+    columns:
+      id: { type: "bigint", required: true }
+      serial: { type: "text", required: true }
+      machine_id: { type: "text", required: true }
+      event_id: { type: "text", required: true }
+      type: { type: "text", required: true }
+      payload: { type: "jsonb", required: true }
+      created_at: { type: "timestamptz", required: true }
+    rules:
+      - "NÃO USAR no runtime"
+      - "Somente leitura/migração"
+
+  iot_eventos:
+    canonical: false
+    runtime: true
+    table: "iot_eventos"
+    purpose: "LEGADO local (compat). Mantido por compatibilidade; não é fonte da verdade."
+    columns:
+      id: { type: "bigint|uuid", required: true }
+      gw_serial: { type: "text", required: true }
+      ts_gw: { type: "int", required: true }
+      tipo: { type: "text", required: true }
+      payload: { type: "jsonb", required: true }
+      raw_body: { type: "text", required: true }
+      hmac_ok: { type: "bool", required: true }
+      created_at: { type: "timestamptz", required: true }
