@@ -30,11 +30,15 @@ function normalizeTipo(input: string) {
 
 /**
  * EVENTO (PT-BR)
- * - Auth HMAC via verifyHmac (mesmo padrão do projeto)
+ * - Auth HMAC via verifyHmac
  * - Registra evento em eventos_iot (PT-BR) ligado a gateway_id e (se possível) maquina_id (condominio_maquinas.id)
  * - Mantém log legado em iot_eventos + iot_ciclos (pra não quebrar nada)
- * - Se vier cmd_id, tenta amarrar com iot_commands e atualizar status -> EXECUTADO (quando fizer sentido)
- * - Se encontrar ciclo_id dentro do payload do comando, atualiza ciclos.pulso_enviado_at (e opcionalmente LIBERADO)
+ * - Se vier cmd_id, amarra com iot_commands e atualiza status -> EXECUTADO quando fizer sentido
+ * - Atualiza ciclos (PT-BR) quando tiver ciclo_id no payload do comando:
+ *    AGUARDANDO_LIBERACAO -> LIBERADO (PULSO)
+ *    LIBERADO -> EM_USO (BUSY_ON)
+ *    EM_USO -> FINALIZADO (BUSY_OFF)
+ *   + timestamps pulso_enviado_at / busy_on_at / busy_off_at (+ eta_livre_at opcional)
  */
 export async function POST(req: Request) {
   const serial = (req.headers.get("x-gw-serial") || "").trim();
@@ -93,7 +97,9 @@ export async function POST(req: Request) {
   if (!Number.isFinite(tsGw)) return json(400, { ok: false, error: "invalid_ts" });
 
   const admin = supabaseAdmin() as any;
-  const nowIso = new Date().toISOString();
+
+  // timestamps baseados no ts do gateway (mais correto que now do servidor)
+  const eventoIso = new Date(tsGw * 1000).toISOString();
 
   // 0) Resolve gateway_id pelo serial
   const { data: gw, error: gwErr } = await admin
@@ -117,7 +123,7 @@ export async function POST(req: Request) {
 
   let condominioMaquinasId: string | null = null;
 
-  // b) cmd_id -> iot_commands
+  // cmd_id -> iot_commands
   let cmdRow: any = null;
   if (cmdId) {
     const { data: c, error: cErr } = await admin
@@ -136,7 +142,7 @@ export async function POST(req: Request) {
     }
   }
 
-  // a) machine_id -> condominio_maquinas
+  // machine_id -> condominio_maquinas
   if (!condominioMaquinasId && machineIdent) {
     const { data: m, error: mErr } = await admin
       .from("condominio_maquinas")
@@ -159,7 +165,7 @@ export async function POST(req: Request) {
       maquina_id: condominioMaquinasId,
       tipo, // enum iot_evento_tipo
       payload: payload ?? {},
-      created_at: new Date(tsGw * 1000).toISOString(),
+      created_at: eventoIso,
     })
     .select("id, created_at")
     .single();
@@ -178,7 +184,7 @@ export async function POST(req: Request) {
     .insert({
       gw_serial: serial,
       ts_gw: tsGw,
-      tipo, // agora normalizado
+      tipo, // normalizado
       payload,
       raw_body: rawBody,
       hmac_ok: true,
@@ -197,7 +203,29 @@ export async function POST(req: Request) {
     });
   }
 
-  // 4) Se for PULSO_ENVIADO, criar iot_ciclos (legado) e fechar loop do comando/ciclo
+  /**
+   * Atualiza ciclos (PT-BR) apenas se houver ciclo_id no payload do comando.
+   * Regra: não “adivinha” ciclo por outras tabelas (pra não quebrar).
+   */
+  const cicloId: string = cmdRow?.payload?.ciclo_id ? String(cmdRow.payload.ciclo_id) : "";
+
+  async function updateCicloSafe(upd: any, whereStatus?: string) {
+    if (!cicloId) return { did: false };
+
+    let q = admin.from("ciclos").update(upd).eq("id", cicloId);
+
+    // trava por status quando fizer sentido (evita regressão de estado)
+    if (whereStatus) q = q.eq("status", whereStatus);
+
+    const { data, error } = await q.select("id,status").maybeSingle();
+    if (error) {
+      console.log("[IOT_EVENTO] ciclo_update_error", { cicloId, tipo, error: error.message });
+      return { did: false, error: error.message };
+    }
+    return { did: !!data, data };
+  }
+
+  // 4) Se for PULSO_ENVIADO, criar iot_ciclos (legado) + fechar loop do comando/ciclo
   if (tipo === "PULSO_ENVIADO") {
     const pulsesRaw = payload?.payload?.pulses ?? payload?.pulses ?? 1;
     const pulses = toInt(pulsesRaw, 1);
@@ -225,32 +253,22 @@ export async function POST(req: Request) {
       });
     }
 
-    // 4.1) Se tiver cmdRow, atualiza iot_commands -> EXECUTADO (sem inventar demais)
+    // 4.1) Se tiver cmdRow, atualiza iot_commands -> EXECUTADO (só se estava ENVIADO/ACK)
     if (cmdRow?.id) {
       const currStatus = String(cmdRow.status ?? "");
-      // só avança se estava em ENVIADO/ACK, para evitar bagunça
       if (currStatus === "ENVIADO" || currStatus === "ACK") {
-        await admin
-          .from("iot_commands")
-          .update({ status: "EXECUTADO" })
-          .eq("id", cmdRow.id)
-          .eq("gateway_id", gw.id);
-      }
-
-      // 4.2) Se o payload do comando tiver ciclo_id, marca pulso_enviado_at no ciclos (PT-BR)
-      const cicloId = cmdRow?.payload?.ciclo_id ? String(cmdRow.payload.ciclo_id) : "";
-      if (cicloId) {
-        // não arrisca “estado errado”: só seta timestamp e, se estiver aguardando, libera
-        await admin
-          .from("ciclos")
-          .update({
-            pulso_enviado_at: nowIso,
-            status: "LIBERADO",
-          })
-          .eq("id", cicloId)
-          .eq("status", "AGUARDANDO_LIBERACAO");
+        await admin.from("iot_commands").update({ status: "EXECUTADO" }).eq("id", cmdRow.id).eq("gateway_id", gw.id);
       }
     }
+
+    // 4.2) Atualiza ciclo PT-BR: AGUARDANDO_LIBERACAO -> LIBERADO + pulso_enviado_at
+    const cicloUpd = await updateCicloSafe(
+      {
+        pulso_enviado_at: eventoIso,
+        status: "LIBERADO",
+      },
+      "AGUARDANDO_LIBERACAO"
+    );
 
     return json(200, {
       ok: true,
@@ -258,10 +276,50 @@ export async function POST(req: Request) {
       created_at: evPt.created_at,
       legacy_evento_id: evLegacy.id,
       ciclos_criados: pulses,
+      ciclo_atualizado: cicloUpd.did,
     });
   }
 
-  // BUSY/HEARTBEAT/ERRO: por enquanto só log + ligação PT-BR
+  // BUSY_ON: LIBERADO -> EM_USO + busy_on_at
+  if (tipo === "BUSY_ON") {
+    const cicloUpd = await updateCicloSafe(
+      {
+        busy_on_at: eventoIso,
+        status: "EM_USO",
+        // eta_livre_at: opcional (não temos base confiável aqui)
+      },
+      "LIBERADO"
+    );
+
+    return json(200, {
+      ok: true,
+      evento_id: evPt.id,
+      created_at: evPt.created_at,
+      legacy_evento_id: evLegacy.id,
+      ciclo_atualizado: cicloUpd.did,
+    });
+  }
+
+  // BUSY_OFF: EM_USO -> FINALIZADO + busy_off_at
+  if (tipo === "BUSY_OFF") {
+    const cicloUpd = await updateCicloSafe(
+      {
+        busy_off_at: eventoIso,
+        status: "FINALIZADO",
+      },
+      "EM_USO"
+    );
+
+    return json(200, {
+      ok: true,
+      evento_id: evPt.id,
+      created_at: evPt.created_at,
+      legacy_evento_id: evLegacy.id,
+      ciclo_atualizado: cicloUpd.did,
+    });
+  }
+
+  // HEARTBEAT/ERRO: por enquanto só log + ligação PT-BR
   return json(200, {
     ok: true,
     evento_id: evPt.id,
