@@ -1,3 +1,4 @@
+// app/api/iot/ack/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -9,19 +10,28 @@ function bad(message: string, status = 400, extra?: any) {
   return NextResponse.json({ ok: false, error: message, ...(extra ?? {}) }, { status });
 }
 
+/**
+ * ACK (PT-BR)
+ * - Auth HMAC via authenticateGateway (mesmo do /poll)
+ * - Recebe: { cmd_id, ok, ts, machine_id?, code? ... }
+ * - Atualiza iot_commands.status e ack_at
+ * - Grava log em iot_acks (opcional, mas útil)
+ *
+ * Status:
+ * - ENVIADO -> (ok ? ACK : FALHOU)
+ */
 export async function POST(req: Request) {
   try {
     const rawBody = await req.text();
 
     // 1) Auth HMAC (mesmo padrão do /poll)
     const auth = authenticateGateway(req, rawBody);
-    if (!auth.ok) {
-      return NextResponse.json(auth, { status: 401 });
-    }
+    if (!auth.ok) return NextResponse.json(auth, { status: auth.status ?? 401 });
+
     const serial = auth.serial;
 
     // 2) Parse JSON
-    let data: any;
+    let data: any = {};
     try {
       data = JSON.parse(rawBody || "{}");
     } catch {
@@ -39,54 +49,60 @@ export async function POST(req: Request) {
     const machineId = data?.machine_id ? String(data.machine_id) : null;
     const code = data?.code ? String(data.code) : null;
 
-    const admin = supabaseAdmin();
+    const admin = supabaseAdmin() as any;
     const nowIso = new Date().toISOString();
     const createdAtIso = new Date(ts * 1000).toISOString();
 
-    // 3) Descobre o "cmd" (type) a partir do gateway_commands
+    // 3) Carrega gateway por serial (pra obter gateway_id)
+    const { data: gw, error: gwErr } = await admin
+      .from("gateways")
+      .select("id, serial")
+      .eq("serial", serial)
+      .maybeSingle();
+
+    if (gwErr) return bad("db_error", 500, { detail: gwErr.message });
+    if (!gw) return bad("gateway_not_found", 404);
+
+    // 4) Busca comando real no schema PT-BR (iot_commands) via cmd_id
     const { data: cmdRow, error: cmdErr } = await admin
-      .from("gateway_commands")
-      .select("id, type, status")
-      .eq("id", cmdId)
-      .eq("gateway_serial", serial)
+      .from("iot_commands")
+      .select("id, cmd_id, tipo, status, condominio_maquinas_id")
+      .eq("gateway_id", gw.id)
+      .eq("cmd_id", cmdId)
       .maybeSingle();
 
     if (cmdErr) return bad("db_error", 500, { detail: cmdErr.message });
     if (!cmdRow) return bad("cmd_not_found", 404);
 
-    const cmd = String(cmdRow.type ?? "UNKNOWN");
+    const cmdTipo = String(cmdRow.tipo ?? "UNKNOWN");
 
-    // 4) Grava ACK no schema REAL (serial, cmd_id, cmd, ...)
+    // 5) Log do ACK (mantém compatibilidade com seu histórico)
     const { error: ackErr } = await admin.from("iot_acks").insert({
       serial,
       machine_id: machineId,
       cmd_id: cmdId,
-      cmd,
+      cmd: cmdTipo,
       ok,
       code: code ?? null,
       payload: data,
       created_at: createdAtIso,
     });
 
-    if (ackErr) {
-      return bad("db_error", 500, { detail: ackErr.message });
-    }
+    if (ackErr) return bad("db_error", 500, { detail: ackErr.message });
 
-    // 5) Dá baixa no comando: sent -> acked/failed
-    const newStatus = ok ? "acked" : "failed";
+    // 6) Atualiza status do comando PT-BR
+    const newStatus = ok ? "ACK" : "FALHOU";
 
-    // Atualiza só campos que sabemos que existem com certeza: status.
-    // (sent_at existe; acked_at pode não existir — então não usamos aqui.)
     const { error: upErr } = await admin
-      .from("gateway_commands")
-      .update({ status: newStatus })
-      .eq("id", cmdId)
-      .eq("gateway_serial", serial);
+      .from("iot_commands")
+      .update({ status: newStatus, ack_at: nowIso })
+      .eq("id", cmdRow.id)
+      .eq("gateway_id", gw.id);
 
     if (upErr) return bad("db_error", 500, { detail: upErr.message });
 
-    // 6) Atualiza last_seen_at no gateway (opcional, mas útil)
-    await admin.from("gateways").update({ last_seen_at: nowIso }).eq("serial", serial);
+    // 7) Atualiza last_seen_at do gateway (opcional)
+    await admin.from("gateways").update({ last_seen_at: nowIso }).eq("id", gw.id);
 
     return NextResponse.json({ ok: true, serial, cmd_id: cmdId, status: newStatus });
   } catch (e: any) {
