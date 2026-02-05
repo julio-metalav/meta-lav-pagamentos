@@ -17,6 +17,7 @@ conventions:
     - "Toda query/endpoint deve usar nomes deste arquivo."
     - "Enum: só valores listados aqui (nada de chute)."
     - "Tabelas PT-BR são a fonte única da verdade no runtime."
+    - "O YAML deve refletir o DB real (anti-ciranda)."
 
 tables:
   # ----------------------------
@@ -27,7 +28,7 @@ tables:
     canonical: true
     runtime: true
     table: "ciclos"
-    purpose: "Estado do ciclo por máquina (AGUARDANDO_LIBERACAO -> LIBERADO -> EM_USO -> FINALIZADO)"
+    purpose: "Estado do ciclo por máquina (AGUARDANDO_LIBERACAO -> LIBERADO -> EM_USO -> FINALIZADO) + ABORTADO"
     primary_key: ["id"]
     foreign_keys:
       - { column: "condominio_id", references: "condominios.id" }
@@ -41,7 +42,8 @@ tables:
           - "LIBERADO"
           - "EM_USO"
           - "FINALIZADO"
-        note: "Se existirem outros valores reais no banco, atualizar aqui (via query enum_range)."
+          - "ABORTADO"
+        note: "Valores verificados via meta_enum_values (DB real)."
     columns:
       id: { type: "uuid", required: true }
       pagamento_id: { type: "uuid", required: false }
@@ -68,7 +70,7 @@ tables:
     canonical: true
     runtime: true
     table: "eventos_iot"
-    purpose: "Log canônico de eventos IoT (PULSO/BUSY_ON/BUSY_OFF) ligado ao gateway e à máquina (condominio_maquinas.id)"
+    purpose: "Log canônico de eventos IoT (PULSO_ENVIADO/BUSY_ON/BUSY_OFF) ligado ao gateway e à máquina (condominio_maquinas.id)"
     primary_key: ["id"]
     foreign_keys:
       - { column: "gateway_id", references: "gateways.id" }
@@ -82,7 +84,7 @@ tables:
           - "BUSY_OFF"
           - "HEARTBEAT"
           - "ERRO"
-        note: "Se o banco tiver mais valores, atualizar aqui."
+        note: "Valores verificados no DB."
     columns:
       id: { type: "uuid", required: true }
       gateway_id: { type: "uuid", required: true }
@@ -90,12 +92,6 @@ tables:
       tipo: { type: "iot_evento_tipo", required: true }
       payload: { type: "jsonb", required: true }
       created_at: { type: "timestamptz", required: true }
-    examples:
-      last_50: |
-        select id, gateway_id, maquina_id, tipo, payload, created_at
-        from eventos_iot
-        order by created_at desc
-        limit 50;
 
   iot_commands:
     canonical: true
@@ -114,35 +110,45 @@ tables:
       tipo: { type: "text", required: false }
       payload: { type: "jsonb", required: true }
       condominio_maquinas_id: { type: "uuid", required: false }
+      ack_at: { type: "timestamptz", required: false }
+      expires_at: { type: "timestamptz", required: false }
       created_at: { type: "timestamptz", required: true }
 
   condominio_maquinas:
     canonical: true
     runtime: true
     table: "condominio_maquinas"
-    purpose: "Cadastro de máquinas por condomínio (inclui identificador_local tipo LAV-01/SEC-01)"
+    purpose: "Cadastro de máquinas por condomínio (identificador_local LAV-01/SEC-01). DB real usa coluna 'tipo' (enum tipo_maquina)."
     primary_key: ["id"]
     foreign_keys:
       - { column: "condominio_id", references: "condominios.id" }
       - { column: "gateway_id", references: "gateways.id" }
+      - { column: "pos_device_id", references: "pos_devices.id" }
     enums:
-      tipo_maquina:
+      tipo:
         enum_name: "tipo_maquina"
         values:
           - "lavadora"
           - "secadora"
+        note: "No DB a coluna chama 'tipo' (não 'tipo_maquina')."
     columns:
       id: { type: "uuid", required: true }
       condominio_id: { type: "uuid", required: true }
       gateway_id: { type: "uuid", required: true }
       identificador_local: { type: "text", required: true }
-      tipo_maquina: { type: "tipo_maquina", required: true }
+      tipo: { type: "tipo_maquina", required: true }
+      ativa: { type: "bool", required: false }
+      duracao_ciclo_min: { type: "int", required: false }
+      buffer_retirada_min: { type: "int", required: false }
+      pos_device_id: { type: "uuid", required: false }
+      created_at: { type: "timestamptz", required: false }
+      updated_at: { type: "timestamptz", required: false }
 
   gateways:
     canonical: true
     runtime: true
     table: "gateways"
-    purpose: "Cadastro de gateways (serial, last_seen, condominio_id)"
+    purpose: "Cadastro de gateways (serial, last_seen_at, telemetria). DB real usa last_seen_at (não last_seen)."
     primary_key: ["id"]
     foreign_keys:
       - { column: "condominio_id", references: "condominios.id" }
@@ -150,7 +156,18 @@ tables:
       id: { type: "uuid", required: true }
       serial: { type: "text", required: true }
       condominio_id: { type: "uuid", required: true }
-      last_seen: { type: "timestamptz", required: false }
+      last_seen_at: { type: "timestamptz", required: false }
+      modelo: { type: "text", required: false }
+      fw_version: { type: "text", required: false }
+      firmware_version: { type: "text", required: false }
+      ip_local: { type: "text", required: false }
+      token: { type: "text", required: false }
+      busy: { type: "bool", required: false }
+      last_status_at: { type: "timestamptz", required: false }
+      rssi: { type: "int", required: false }
+      created_at: { type: "timestamptz", required: false }
+      updated_at: { type: "timestamptz", required: false }
+      condominium_id: { type: "uuid", required: false } # legado/coluna duplicada (DB real)
 
   pos_devices:
     canonical: true
@@ -164,21 +181,43 @@ tables:
       id: { type: "uuid", required: true }
       serial: { type: "text", required: true }
       condominio_id: { type: "uuid", required: true }
+      stone_merchant_id: { type: "text", required: false }
+      app_version: { type: "text", required: false }
+      last_seen_at: { type: "timestamptz", required: false }
+      created_at: { type: "timestamptz", required: false }
+      updated_at: { type: "timestamptz", required: false }
 
   pagamentos:
     canonical: true
     runtime: true
     table: "pagamentos"
-    purpose: "Pagamentos (Pix/cartão) e vínculo com ciclo(s)"
+    purpose: "Pagamentos (Pix/cartão). DB real usa valor_centavos + enums pag_metodo/pag_status."
     primary_key: ["id"]
     foreign_keys:
       - { column: "condominio_id", references: "condominios.id" }
+      - { column: "maquina_id", references: "condominio_maquinas.id" }
+      - { column: "gateway_pagamento", references: "gateways.id" }
+    enums:
+      metodo:
+        enum_name: "pag_metodo"
+        values: []   # preencher automaticamente quando você criar meta_enum_values (ou colar enum_range)
+        note: "Enum real do DB. Preencher via meta_enum_values."
+      status:
+        enum_name: "pag_status"
+        values: []   # preencher automaticamente quando você criar meta_enum_values (ou colar enum_range)
+        note: "Enum real do DB. Preencher via meta_enum_values."
     columns:
       id: { type: "uuid", required: true }
       condominio_id: { type: "uuid", required: true }
-      metodo: { type: "text", required: true }
-      valor: { type: "numeric", required: true }
-      status: { type: "text", required: true }
+      maquina_id: { type: "uuid", required: false }
+      origem: { type: "text", required: false }
+      gateway_pagamento: { type: "uuid", required: false }
+      valor_centavos: { type: "int", required: true }
+      external_id: { type: "text", required: false }
+      idempotency_key: { type: "text", required: false }
+      metodo: { type: "pag_metodo", required: true }
+      status: { type: "pag_status", required: true }
+      paid_at: { type: "timestamptz", required: false }
       created_at: { type: "timestamptz", required: true }
 
   # ----------------------------
@@ -209,9 +248,9 @@ tables:
     table: "iot_eventos"
     purpose: "LEGADO local (compat). Mantido por compatibilidade; não é fonte da verdade."
     columns:
-      id: { type: "bigint|uuid", required: true }
+      id: { type: "uuid", required: true }
       gw_serial: { type: "text", required: true }
-      ts_gw: { type: "int", required: true }
+      ts_gw: { type: "bigint", required: true }
       tipo: { type: "text", required: true }
       payload: { type: "jsonb", required: true }
       raw_body: { type: "text", required: true }
