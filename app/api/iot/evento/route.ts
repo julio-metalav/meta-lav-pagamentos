@@ -28,17 +28,30 @@ function normalizeTipo(input: string) {
   return "";
 }
 
+function pickCicloIdFromCmd(cmdRow: any): string {
+  // tenta pegar de várias formas (robustez)
+  const p = cmdRow?.payload ?? null;
+  const c =
+    (p?.ciclo_id ?? "") ||
+    (p?.cicloId ?? "") ||
+    (p?.ciclo?.id ?? "") ||
+    (p?.ciclo?.ciclo_id ?? "") ||
+    (p?.payload?.ciclo_id ?? "") ||
+    "";
+
+  return c ? String(c) : "";
+}
+
 /**
  * EVENTO (PT-BR)
  * - Auth HMAC via verifyHmac
  * - Registra evento em eventos_iot (PT-BR) ligado a gateway_id e (se possível) maquina_id (condominio_maquinas.id)
  * - Mantém log legado em iot_eventos + iot_ciclos (pra não quebrar nada)
  * - Se vier cmd_id, amarra com iot_commands e atualiza status -> EXECUTADO quando fizer sentido
- * - Atualiza ciclos (PT-BR) quando tiver ciclo_id no payload do comando:
- *    AGUARDANDO_LIBERACAO -> LIBERADO (PULSO)
- *    LIBERADO -> EM_USO (BUSY_ON)
- *    EM_USO -> FINALIZADO (BUSY_OFF)
- *   + timestamps pulso_enviado_at / busy_on_at / busy_off_at (+ eta_livre_at opcional)
+ * - Atualiza ciclos (PT-BR) preferencialmente via cmd_id -> iot_commands.payload.ciclo_id
+ *   e, se não der match (ou houver duplicidade), faz fallback seguro por maquina_id:
+ *    - BUSY_ON: ciclo mais antigo LIBERADO sem busy_on
+ *    - BUSY_OFF: ciclo EM_USO sem busy_off
  */
 export async function POST(req: Request) {
   const serial = (req.headers.get("x-gw-serial") || "").trim();
@@ -203,14 +216,11 @@ export async function POST(req: Request) {
     });
   }
 
-  /**
-   * Atualiza ciclos (PT-BR) apenas se houver ciclo_id no payload do comando.
-   * Regra: não “adivinha” ciclo por outras tabelas (pra não quebrar).
-   */
-  const cicloId: string = cmdRow?.payload?.ciclo_id ? String(cmdRow.payload.ciclo_id) : "";
+  // Preferência: ciclo_id via cmd_id -> iot_commands.payload.ciclo_id
+  const cicloId: string = pickCicloIdFromCmd(cmdRow);
 
-  async function updateCicloSafe(upd: any, whereStatus?: string) {
-    if (!cicloId) return { did: false };
+  async function updateCicloById(upd: any, whereStatus?: string) {
+    if (!cicloId) return { did: false, reason: "no_ciclo_id" };
 
     let q = admin.from("ciclos").update(upd).eq("id", cicloId);
 
@@ -220,9 +230,97 @@ export async function POST(req: Request) {
     const { data, error } = await q.select("id,status").maybeSingle();
     if (error) {
       console.log("[IOT_EVENTO] ciclo_update_error", { cicloId, tipo, error: error.message });
-      return { did: false, error: error.message };
+      return { did: false, reason: "db_error", error: error.message };
     }
     return { did: !!data, data };
+  }
+
+  async function updateCicloFallbackByMachine(kind: "BUSY_ON" | "BUSY_OFF" | "PULSO_ENVIADO") {
+    if (!condominioMaquinasId) return { did: false, reason: "no_machine" };
+
+    // Busca o ciclo “certo” por máquina, evitando órfãos
+    if (kind === "BUSY_ON") {
+      const { data: c, error } = await admin
+        .from("ciclos")
+        .select("id,status,pulso_enviado_at,created_at")
+        .eq("maquina_id", condominioMaquinasId)
+        .eq("status", "LIBERADO")
+        .is("busy_on_at", null)
+        .order("pulso_enviado_at", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) return { did: false, reason: "db_error", error: error.message };
+      if (!c?.id) return { did: false, reason: "no_candidate" };
+
+      const { data: u, error: uErr } = await admin
+        .from("ciclos")
+        .update({ busy_on_at: eventoIso, status: "EM_USO" })
+        .eq("id", c.id)
+        .eq("status", "LIBERADO")
+        .select("id,status")
+        .maybeSingle();
+
+      if (uErr) return { did: false, reason: "db_error", error: uErr.message };
+      return { did: !!u, data: u, picked_ciclo_id: c.id };
+    }
+
+    if (kind === "BUSY_OFF") {
+      const { data: c, error } = await admin
+        .from("ciclos")
+        .select("id,status,busy_on_at,created_at")
+        .eq("maquina_id", condominioMaquinasId)
+        .eq("status", "EM_USO")
+        .is("busy_off_at", null)
+        .order("busy_on_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) return { did: false, reason: "db_error", error: error.message };
+      if (!c?.id) return { did: false, reason: "no_candidate" };
+
+      const { data: u, error: uErr } = await admin
+        .from("ciclos")
+        .update({ busy_off_at: eventoIso, status: "FINALIZADO" })
+        .eq("id", c.id)
+        .eq("status", "EM_USO")
+        .select("id,status")
+        .maybeSingle();
+
+      if (uErr) return { did: false, reason: "db_error", error: uErr.message };
+      return { did: !!u, data: u, picked_ciclo_id: c.id };
+    }
+
+    // PULSO_ENVIADO fallback (opcional, bem conservador):
+    // só promove AGUARDANDO_LIBERACAO -> LIBERADO se existir exatamente 1 candidato
+    if (kind === "PULSO_ENVIADO") {
+      const { data: list, error } = await admin
+        .from("ciclos")
+        .select("id,created_at,status")
+        .eq("maquina_id", condominioMaquinasId)
+        .eq("status", "AGUARDANDO_LIBERACAO")
+        .order("created_at", { ascending: true })
+        .limit(1);
+
+      if (error) return { did: false, reason: "db_error", error: error.message };
+      const c = (list || [])[0];
+      if (!c?.id) return { did: false, reason: "no_candidate" };
+
+      const { data: u, error: uErr } = await admin
+        .from("ciclos")
+        .update({ pulso_enviado_at: eventoIso, status: "LIBERADO" })
+        .eq("id", c.id)
+        .eq("status", "AGUARDANDO_LIBERACAO")
+        .select("id,status")
+        .maybeSingle();
+
+      if (uErr) return { did: false, reason: "db_error", error: uErr.message };
+      return { did: !!u, data: u, picked_ciclo_id: c.id };
+    }
+
+    return { did: false, reason: "unsupported" };
   }
 
   // 4) Se for PULSO_ENVIADO, criar iot_ciclos (legado) + fechar loop do comando/ciclo
@@ -262,7 +360,7 @@ export async function POST(req: Request) {
     }
 
     // 4.2) Atualiza ciclo PT-BR: AGUARDANDO_LIBERACAO -> LIBERADO + pulso_enviado_at
-    const cicloUpd = await updateCicloSafe(
+    let cicloUpd = await updateCicloById(
       {
         pulso_enviado_at: eventoIso,
         status: "LIBERADO",
@@ -270,39 +368,54 @@ export async function POST(req: Request) {
       "AGUARDANDO_LIBERACAO"
     );
 
+    // fallback bem conservador (só se não deu via cmd_id)
+    let fallback: any = null;
+    if (!cicloUpd.did) {
+      fallback = await updateCicloFallbackByMachine("PULSO_ENVIADO");
+    }
+
     return json(200, {
       ok: true,
       evento_id: evPt.id,
       created_at: evPt.created_at,
       legacy_evento_id: evLegacy.id,
       ciclos_criados: pulses,
-      ciclo_atualizado: cicloUpd.did,
+      ciclo_atualizado: cicloUpd.did || !!fallback?.did,
+      ciclo_update_source: cicloUpd.did ? "cmd_id" : fallback?.did ? "fallback_machine" : "none",
+      ...(fallback?.picked_ciclo_id ? { ciclo_fallback_id: fallback.picked_ciclo_id } : {}),
     });
   }
 
   // BUSY_ON: LIBERADO -> EM_USO + busy_on_at
   if (tipo === "BUSY_ON") {
-    const cicloUpd = await updateCicloSafe(
+    let cicloUpd = await updateCicloById(
       {
         busy_on_at: eventoIso,
         status: "EM_USO",
-        // eta_livre_at: opcional (não temos base confiável aqui)
       },
       "LIBERADO"
     );
+
+    // Se não atualizou (ciclo_id vazio ou status mismatch), fallback por máquina
+    let fallback: any = null;
+    if (!cicloUpd.did) {
+      fallback = await updateCicloFallbackByMachine("BUSY_ON");
+    }
 
     return json(200, {
       ok: true,
       evento_id: evPt.id,
       created_at: evPt.created_at,
       legacy_evento_id: evLegacy.id,
-      ciclo_atualizado: cicloUpd.did,
+      ciclo_atualizado: cicloUpd.did || !!fallback?.did,
+      ciclo_update_source: cicloUpd.did ? "cmd_id" : fallback?.did ? "fallback_machine" : "none",
+      ...(fallback?.picked_ciclo_id ? { ciclo_fallback_id: fallback.picked_ciclo_id } : {}),
     });
   }
 
   // BUSY_OFF: EM_USO -> FINALIZADO + busy_off_at
   if (tipo === "BUSY_OFF") {
-    const cicloUpd = await updateCicloSafe(
+    let cicloUpd = await updateCicloById(
       {
         busy_off_at: eventoIso,
         status: "FINALIZADO",
@@ -310,12 +423,20 @@ export async function POST(req: Request) {
       "EM_USO"
     );
 
+    // Se não atualizou, fallback por máquina
+    let fallback: any = null;
+    if (!cicloUpd.did) {
+      fallback = await updateCicloFallbackByMachine("BUSY_OFF");
+    }
+
     return json(200, {
       ok: true,
       evento_id: evPt.id,
       created_at: evPt.created_at,
       legacy_evento_id: evLegacy.id,
-      ciclo_atualizado: cicloUpd.did,
+      ciclo_atualizado: cicloUpd.did || !!fallback?.did,
+      ciclo_update_source: cicloUpd.did ? "cmd_id" : fallback?.did ? "fallback_machine" : "none",
+      ...(fallback?.picked_ciclo_id ? { ciclo_fallback_id: fallback.picked_ciclo_id } : {}),
     });
   }
 
