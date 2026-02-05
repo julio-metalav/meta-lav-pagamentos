@@ -1,19 +1,29 @@
 // app/api/pos/authorize/route.ts
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 /**
- * Observação importante:
- * - Este arquivo evita depender de tipos gerados do Supabase.
- * - O client é tratado como `any` localmente para não estourar "public" vs "never" no build do Vercel.
+ * Meta-Lav Pagamentos — POS Authorize (PT-BR schema)
+ * Regra B: 1 POS por máquina (condominio_maquinas.pos_device_id = pos_devices.id)
+ *
+ * Fonte da verdade: tabelas PT-BR:
+ * - pos_devices, condominio_maquinas, pagamentos, ciclos, iot_commands
+ *
+ * Objetivo: POS -> cria pagamento + ciclo -> cria iot_command(PULSE) pro gateway.
+ *
+ * Importante:
+ * - Usa Supabase ADMIN (service role) via lib/supabaseAdmin.ts (server only).
+ * - Sem dependência de tipos gerados do Supabase.
+ * - Sem rpc("sql") / information_schema.
  */
 
-// ---------- Tipos de entrada/saída (simples, sem Supabase Database types) ----------
 type AuthorizeBody = {
-  pos_serial?: string; // opcional (pode vir por header também)
-  identificador_local?: string; // "LAV-01" | "SEC-01"
-  valor?: number; // ex.: 16.0
-  origem?: string; // enum no Postgres (UDT). Ex.: "pos" | "pwa" etc (depende do seu schema)
+  pos_serial?: string;
+  identificador_local?: string; // ex: LAV-01 / SEC-01
+  valor_centavos?: number;      // preferível
+  valor?: number;               // opcional (reais) -> converte
+  metodo?: "PIX" | "CARTAO";    // pag_metodo
+  idempotency_key?: string;     // ideal vir do POS
   metadata?: Record<string, unknown>;
 };
 
@@ -21,87 +31,53 @@ function jsonError(message: string, status = 400, extra?: Record<string, unknown
   return NextResponse.json({ ok: false, error: message, ...(extra ?? {}) }, { status });
 }
 
-// ---------- Helpers SQL (via supabase.rpc("sql", { query })) ----------
-// Mantemos isso porque você já tentou assim, mas agora sem tipagem restritiva.
-async function sqlQuery(supabase: any, query: string): Promise<any[]> {
-  // Se sua função RPC "sql" retorna { rows: [...] } ou retorna direto, ajusta aqui.
-  // Pra ficar resiliente: tentamos os dois formatos.
-  const { data, error } = await supabase.rpc("sql", { query });
-  if (error) throw new Error(error.message);
-
-  if (Array.isArray(data)) return data;
-  if (data?.rows && Array.isArray(data.rows)) return data.rows;
-  return [];
+function toCentavos(body: AuthorizeBody): number | null {
+  if (typeof body.valor_centavos === "number" && Number.isFinite(body.valor_centavos)) {
+    const v = Math.trunc(body.valor_centavos);
+    return v > 0 ? v : null;
+  }
+  if (typeof body.valor === "number" && Number.isFinite(body.valor)) {
+    const v = Math.round(body.valor * 100);
+    return v > 0 ? v : null;
+  }
+  return null;
 }
 
-/**
- * Descobre o nome do UDT (User-Defined Type) de uma coluna (ex.: enum) no Postgres.
- * Ex.: schema="pagamentos", table="pagamentos", column="origem"
- */
-async function getUdtName(supabase: any, tableName: string, columnName: string, schemaName = "public") {
-  const q = `
-    select udt_name
-    from information_schema.columns
-    where table_schema = '${schemaName}'
-      and table_name = '${tableName}'
-      and column_name = '${columnName}'
-    limit 1;
-  `.trim();
-
-  const rows = await sqlQuery(supabase, q);
-  const udt = rows?.[0]?.udt_name;
-  return typeof udt === "string" && udt.length > 0 ? udt : null;
-}
-
-/**
- * Pega labels (valores) de um enum do Postgres (pg_enum).
- */
-async function getEnumLabels(supabase: any, enumTypeName: string) {
-  const q = `
-    select e.enumlabel as label
-    from pg_type t
-    join pg_enum e on t.oid = e.enumtypid
-    join pg_catalog.pg_namespace n on n.oid = t.typnamespace
-    where t.typname = '${enumTypeName}'
-    order by e.enumsortorder asc;
-  `.trim();
-
-  const rows = await sqlQuery(supabase, q);
-  return rows.map((r) => r.label).filter((x: any) => typeof x === "string");
-}
-
-// ---------- Route ----------
 export async function POST(req: Request) {
   try {
-    const supabase = (await createClient()) as any;
+    const supabase = supabaseAdmin() as any;
 
-    // Body
-    let body: AuthorizeBody | null = null;
+    let body: AuthorizeBody = {};
     try {
       body = (await req.json()) as AuthorizeBody;
     } catch {
-      body = null;
+      body = {};
     }
 
     const headerPosSerial =
       req.headers.get("x-pos-serial") ||
       req.headers.get("x-device-serial") ||
-      req.headers.get("x-serial");
+      req.headers.get("x-serial") ||
+      "";
 
-    const pos_serial = (body?.pos_serial || headerPosSerial || "").trim();
-    const identificador_local = (body?.identificador_local || "").trim();
-    const valor = body?.valor;
-    const origem = (body?.origem || "").trim();
-    const metadata = body?.metadata ?? {};
+    const headerIdempotency =
+      req.headers.get("x-idempotency-key") ||
+      req.headers.get("idempotency-key") ||
+      "";
+
+    const pos_serial = (body.pos_serial || headerPosSerial).trim();
+    const identificador_local = (body.identificador_local || "").trim();
+
+    const valor_centavos = toCentavos(body);
+    const metodo = (body.metodo || "").trim().toUpperCase();
+    const metadata = body.metadata ?? {};
 
     if (!pos_serial) return jsonError("POS serial ausente (body.pos_serial ou header x-pos-serial).", 400);
     if (!identificador_local) return jsonError("identificador_local ausente (ex.: LAV-01 / SEC-01).", 400);
-    if (typeof valor !== "number" || !Number.isFinite(valor) || valor <= 0) {
-      return jsonError("valor inválido.", 400);
-    }
-    if (!origem) return jsonError("origem ausente.", 400);
+    if (!valor_centavos) return jsonError("valor inválido (use valor_centavos ou valor).", 400);
+    if (metodo !== "PIX" && metodo !== "CARTAO") return jsonError("metodo inválido (PIX | CARTAO).", 400);
 
-    // 1) Validar POS Device
+    // 1) POS Device
     const { data: posDevice, error: posErr } = await supabase
       .from("pos_devices")
       .select("id, serial, condominio_id")
@@ -113,54 +89,131 @@ export async function POST(req: Request) {
 
     const condominio_id = posDevice.condominio_id;
 
-    // 2) Buscar máquina do condomínio pelo identificador_local
+    // 2) Máquina vinculada ao POS (Regra B)
     const { data: maquina, error: maqErr } = await supabase
       .from("condominio_maquinas")
-      .select("id, condominio_id, gateway_id, tipo_maquina, identificador_local")
+      .select("id, condominio_id, gateway_id, tipo, identificador_local, ativa, pos_device_id")
       .eq("condominio_id", condominio_id)
+      .eq("pos_device_id", posDevice.id)
       .eq("identificador_local", identificador_local)
       .maybeSingle();
 
     if (maqErr) return jsonError("Erro ao buscar condominio_maquinas.", 500, { details: maqErr.message });
-    if (!maquina) return jsonError("Máquina não encontrada para esse POS/condomínio.", 404);
+    if (!maquina) {
+      return jsonError("Máquina não encontrada ou não vinculada a este POS (pos_device_id).", 404, {
+        condominio_id,
+        pos_device_id: posDevice.id,
+        identificador_local,
+      });
+    }
+    if (!maquina.ativa) return jsonError("Máquina está inativa.", 409);
     if (!maquina.gateway_id) return jsonError("Máquina sem gateway_id vinculado.", 409);
 
-    // 3) (Opcional) validar enum origem (sem quebrar build)
-    // Se você não quiser validar aqui, pode remover esse bloco.
-    // Ele é útil pra retornar 400 antes do insert estourar constraint.
-    const udt_origem = await getUdtName(supabase, "pagamentos", "origem", "public");
-    if (udt_origem) {
-      const labels = await getEnumLabels(supabase, udt_origem);
-      if (labels.length > 0 && !labels.includes(origem)) {
-        return jsonError("origem inválida (fora do enum do banco).", 400, {
-          allowed: labels,
-        });
-      }
+    // 3) Idempotência (anti retry/duplo clique)
+    const minuteBucket = Math.floor(Date.now() / 60000);
+    const idempotency_key =
+      (body.idempotency_key || headerIdempotency || "").trim() ||
+      `pos:${pos_serial}:${identificador_local}:${valor_centavos}:${metodo}:${minuteBucket}`;
+
+    const { data: existingPay, error: existErr } = await supabase
+      .from("pagamentos")
+      .select("id, status, created_at")
+      .eq("idempotency_key", idempotency_key)
+      .maybeSingle();
+
+    if (existErr) return jsonError("Erro ao verificar idempotency_key.", 500, { details: existErr.message });
+
+    if (existingPay) {
+      return NextResponse.json({
+        ok: true,
+        reused: true,
+        pagamento_id: existingPay.id,
+        pagamento_status: existingPay.status,
+      });
     }
 
-    // 4) Criar pagamento (status "authorized" / ajuste conforme seu schema)
-    // Ajuste os campos conforme existirem no seu schema real.
-    const pagamentoInsert: Record<string, any> = {
-      condominio_id,
-      maquina_id: maquina.id,
-      pos_device_id: posDevice.id,
-      gateway_id: maquina.gateway_id,
-      valor,
-      origem,
-      status: "authorized",
-      metadata,
-    };
-
+    // 4) Pagamento (PT-BR)
     const { data: pagamento, error: payErr } = await supabase
       .from("pagamentos")
-      .insert(pagamentoInsert)
-      .select("id, condominio_id, maquina_id, gateway_id, status, valor, origem, created_at")
+      .insert({
+        condominio_id,
+        maquina_id: maquina.id,
+        origem: "POS",
+        metodo: metodo,
+        gateway_pagamento: "STONE",
+        valor_centavos,
+        idempotency_key,
+        external_id: null,
+        // status default: CRIADO
+      })
+      .select("id, status, created_at")
       .single();
 
-    if (payErr) {
-      return jsonError("Erro ao criar pagamento.", 500, { details: payErr.message });
+    if (payErr) return jsonError("Erro ao criar pagamento.", 500, { details: payErr.message });
+
+    // 5) Ciclo (PT-BR)
+    const { data: ciclo, error: cicloErr } = await supabase
+      .from("ciclos")
+      .insert({
+        pagamento_id: pagamento.id,
+        condominio_id,
+        maquina_id: maquina.id,
+        // status default: AGUARDANDO_LIBERACAO
+      })
+      .select("id, status, created_at")
+      .single();
+
+    if (cicloErr) {
+      return jsonError("Pagamento criado, mas falhou ao criar ciclo.", 500, {
+        pagamento_id: pagamento.id,
+        details: cicloErr.message,
+      });
     }
 
-    // 5) Criar comando IoT para o gateway (1 pulso = 1 ciclo)
-    // Ajuste nomes de campos/estrutura conforme seu schema.
-    const com
+    // 6) Comando IoT (PT-BR)
+    const cmd_id = crypto.randomUUID();
+    const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 min
+
+    const { data: iotCmd, error: cmdErr } = await supabase
+      .from("iot_commands")
+      .insert({
+        gateway_id: maquina.gateway_id,
+        condominio_maquinas_id: maquina.id,
+        cmd_id,
+        tipo: "PULSE",
+        payload: {
+          pulses: 1,
+          ciclo_id: ciclo.id,
+          pagamento_id: pagamento.id,
+          identificador_local: maquina.identificador_local,
+          tipo_maquina: maquina.tipo, // lavadora | secadora
+          metadata,
+        },
+        status: "PENDENTE",
+        expires_at,
+      })
+      .select("id, status, created_at")
+      .single();
+
+    if (cmdErr) {
+      return jsonError("Pagamento+ciclo criados, mas falhou ao criar iot_command.", 500, {
+        pagamento_id: pagamento.id,
+        ciclo_id: ciclo.id,
+        details: cmdErr.message,
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      reused: false,
+      pagamento_id: pagamento.id,
+      ciclo_id: ciclo.id,
+      iot_command_row_id: iotCmd.id,
+      cmd_id,
+      gateway_id: maquina.gateway_id,
+      expires_at,
+    });
+  } catch (e: any) {
+    return jsonError("Erro inesperado no authorize.", 500, { details: e?.message ?? String(e) });
+  }
+}
