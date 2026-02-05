@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 
@@ -13,26 +14,23 @@ export const runtime = "nodejs";
  * Regras:
  *  - Backend é a fonte da verdade.
  *  - POS não decide nada; apenas solicita.
- *  - Enum labels são resolvidos dinamicamente do Postgres via RPC public.sql (read-only).
  *
  * Segurança:
  *  - Header obrigatório: X-POS-KEY = process.env.POS_API_KEY
  *
- * Tabelas oficiais (PT):
- *  - condominio_maquinas
- *  - gateways
- *  - pagamentos
- *  - iot_commands
+ * Observação (tipagem Supabase):
+ *  - Como você não está usando types gerados do Database, o supabase.rpc() fica com tipos incorretos.
+ *  - Solução prática: (supabase as any).rpc(...)
  */
 
 type AuthorizeBody = {
   pos_device_id: string; // uuid
   maquina_id: string; // uuid = condominio_maquinas.id
   metodo: "PIX" | "CARD" | string;
-  gateway_pagamento?: string; // ex: "STONE" | "ASAAS" etc
-  valor_centavos?: number; // por enquanto vem do POS (até precos_ciclo estar populado)
+  gateway_pagamento?: string;
+  valor_centavos?: number;
   idempotency_key: string;
-  origem?: string; // default POS
+  origem?: string;
 };
 
 function jsonError(status: number, message: string, extra?: Record<string, any>) {
@@ -60,9 +58,6 @@ function escapeSqlLiteral(s: string) {
   return String(s ?? "").replace(/'/g, "''");
 }
 
-/**
- * Busca udt_name do Postgres via RPC public.sql (evita TS "never" + evita depender de FROM information_schema via REST)
- */
 async function getUdtName(
   supabase: ReturnType<typeof createClient>,
   table: string,
@@ -80,7 +75,8 @@ async function getUdtName(
     limit 1
   `;
 
-  const { data, error } = await supabase.rpc("sql", { query: q });
+  const { data, error } = await (supabase as any).rpc("sql", { query: q });
+
   if (error) {
     throw new Error(`Failed to read udt_name for ${table}.${column}: ${error.message}`);
   }
@@ -103,7 +99,7 @@ async function getEnumLabelsByTypeName(
     order by e.enumsortorder asc
   `;
 
-  const { data, error } = await supabase.rpc("sql", { query: q });
+  const { data, error } = await (supabase as any).rpc("sql", { query: q });
 
   if (error) return [];
   if (!Array.isArray(data)) return [];
@@ -152,6 +148,8 @@ export async function POST(req: NextRequest) {
     // 2) Supabase service role (bypass RLS)
     const supabaseUrl = requireEnv("SUPABASE_URL");
     const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+
+    // tipagem relaxada (sem Database types)
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
     });
@@ -240,7 +238,6 @@ export async function POST(req: NextRequest) {
 
     const gatewayValue = pickEnumLabel(gatewayLabels, gateway_pagamento);
 
-    // tenta achar algo tipo AUTHORIZED/AUTORIZADO etc; fallback = primeiro label
     const statusValue = pickEnumLabel(statusLabels, "AUTHORIZED", {
       AUTHORIZED: ["autorizado", "autorizada", "authorized", "auth"],
       CREATED: ["criado", "created"],
@@ -248,22 +245,20 @@ export async function POST(req: NextRequest) {
     });
 
     // 8) Cria venda (pagamentos)
-    const pagamentoInsert: any = {
-      condominio_id: maquina.condominio_id,
-      maquina_id: maquina.id,
-      origem: origemValue,
-      metodo: metodoValue,
-      gateway_pagamento: gatewayValue,
-      valor_centavos: valor_centavos,
-      status: statusValue,
-      idempotency_key,
-      external_id: null,
-      paid_at: null,
-    };
-
     const { data: pagamento, error: pagErr } = await supabase
       .from("pagamentos")
-      .insert(pagamentoInsert)
+      .insert({
+        condominio_id: maquina.condominio_id,
+        maquina_id: maquina.id,
+        origem: origemValue,
+        metodo: metodoValue,
+        gateway_pagamento: gatewayValue,
+        valor_centavos: valor_centavos,
+        status: statusValue,
+        idempotency_key,
+        external_id: null,
+        paid_at: null,
+      })
       .select("id, condominio_id, maquina_id, status, valor_centavos, created_at")
       .single();
 
@@ -273,7 +268,7 @@ export async function POST(req: NextRequest) {
 
     // 9) Cria comando IoT (fila oficial)
     const cmdId = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString(); // 2 min
+    const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
     const commandPayload = {
       pulses: 1,
