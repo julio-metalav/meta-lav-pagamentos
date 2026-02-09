@@ -110,8 +110,6 @@ export async function GET(req: Request) {
       ok: true,
       gateway_id: gatewayId,
       serial,
-      debug_count: list.length,
-      debug_first: list[0] ?? null,
       commands: list.map((c: any) => ({
         id: c.id,
         cmd_id: c.cmd_id,
