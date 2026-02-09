@@ -68,7 +68,7 @@ export async function POST(req: Request) {
         cmd_id,
         tipo,
         payload,
-        status: "pendente",
+        status: "PENDENTE",
         expires_at,
       })
       .select("id, cmd_id, gateway_id, condominio_maquinas_id, tipo, payload, status, created_at")
