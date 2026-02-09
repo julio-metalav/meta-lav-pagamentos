@@ -1,81 +1,37 @@
 // app/api/pos/authorize/route.ts
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { jsonErrorCompat } from "@/lib/api/errors";
+import { parseAuthorizeInput } from "@/lib/payments/contracts";
 
 /**
- * Meta-Lav Pagamentos — POS Authorize (PT-BR schema)
- * Regra B: 1 POS por máquina (condominio_maquinas.pos_device_id = pos_devices.id)
+ * Meta-Lav Pagamentos — POS Authorize (piloto Fase A)
  *
- * Fonte da verdade: tabelas PT-BR:
- * - pos_devices, condominio_maquinas, pagamentos, ciclos, iot_commands
+ * Objetivo deste passo:
+ * - Introduzir DTO/validação centralizada (contracts)
+ * - Introduzir erro canônico compatível (error_v1 sem quebrar legado)
  *
- * Objetivo: POS -> cria pagamento + ciclo -> cria iot_command(PULSE) pro gateway.
- *
- * Importante:
- * - Usa Supabase ADMIN (service role) via lib/supabaseAdmin.ts (server only).
- * - Sem dependência de tipos gerados do Supabase.
- * - Sem rpc("sql") / information_schema.
+ * Sem mudança funcional no fluxo atual.
  */
-
-type AuthorizeBody = {
-  pos_serial?: string;
-  identificador_local?: string; // ex: LAV-01 / SEC-01
-  valor_centavos?: number;      // preferível
-  valor?: number;               // opcional (reais) -> converte
-  metodo?: "PIX" | "CARTAO";    // pag_metodo
-  idempotency_key?: string;     // ideal vir do POS
-  metadata?: Record<string, unknown>;
-};
-
-function jsonError(message: string, status = 400, extra?: Record<string, unknown>) {
-  return NextResponse.json({ ok: false, error: message, ...(extra ?? {}) }, { status });
-}
-
-function toCentavos(body: AuthorizeBody): number | null {
-  if (typeof body.valor_centavos === "number" && Number.isFinite(body.valor_centavos)) {
-    const v = Math.trunc(body.valor_centavos);
-    return v > 0 ? v : null;
-  }
-  if (typeof body.valor === "number" && Number.isFinite(body.valor)) {
-    const v = Math.round(body.valor * 100);
-    return v > 0 ? v : null;
-  }
-  return null;
-}
-
 export async function POST(req: Request) {
   try {
     const supabase = supabaseAdmin() as any;
 
-    let body: AuthorizeBody = {};
+    let body: any = {};
     try {
-      body = (await req.json()) as AuthorizeBody;
+      body = await req.json();
     } catch {
       body = {};
     }
 
-    const headerPosSerial =
-      req.headers.get("x-pos-serial") ||
-      req.headers.get("x-device-serial") ||
-      req.headers.get("x-serial") ||
-      "";
+    const parsed = parseAuthorizeInput(req, body);
+    if (!parsed.ok) {
+      return jsonErrorCompat(parsed.message, 400, { code: parsed.code });
+    }
 
-    const headerIdempotency =
-      req.headers.get("x-idempotency-key") ||
-      req.headers.get("idempotency-key") ||
-      "";
-
-    const pos_serial = (body.pos_serial || headerPosSerial).trim();
-    const identificador_local = (body.identificador_local || "").trim();
-
-    const valor_centavos = toCentavos(body);
-    const metodo = (body.metodo || "").trim().toUpperCase();
-    const metadata = body.metadata ?? {};
-
-    if (!pos_serial) return jsonError("POS serial ausente (body.pos_serial ou header x-pos-serial).", 400);
-    if (!identificador_local) return jsonError("identificador_local ausente (ex.: LAV-01 / SEC-01).", 400);
-    if (!valor_centavos) return jsonError("valor inválido (use valor_centavos ou valor).", 400);
-    if (metodo !== "PIX" && metodo !== "CARTAO") return jsonError("metodo inválido (PIX | CARTAO).", 400);
+    const input = parsed.data;
+    const { pos_serial, identificador_local, valor_centavos, metodo, metadata } = input;
 
     // 1) POS Device
     const { data: posDevice, error: posErr } = await supabase
@@ -84,8 +40,8 @@ export async function POST(req: Request) {
       .eq("serial", pos_serial)
       .maybeSingle();
 
-    if (posErr) return jsonError("Erro ao buscar pos_devices.", 500, { details: posErr.message });
-    if (!posDevice) return jsonError("POS não cadastrado (pos_devices).", 401);
+    if (posErr) return jsonErrorCompat("Erro ao buscar pos_devices.", 500, { code: "db_error", extra: { details: posErr.message } });
+    if (!posDevice) return jsonErrorCompat("POS não cadastrado (pos_devices).", 401, { code: "pos_not_found" });
 
     const condominio_id = posDevice.condominio_id;
 
@@ -98,21 +54,24 @@ export async function POST(req: Request) {
       .eq("identificador_local", identificador_local)
       .maybeSingle();
 
-    if (maqErr) return jsonError("Erro ao buscar condominio_maquinas.", 500, { details: maqErr.message });
+    if (maqErr) return jsonErrorCompat("Erro ao buscar condominio_maquinas.", 500, { code: "db_error", extra: { details: maqErr.message } });
     if (!maquina) {
-      return jsonError("Máquina não encontrada ou não vinculada a este POS (pos_device_id).", 404, {
-        condominio_id,
-        pos_device_id: posDevice.id,
-        identificador_local,
+      return jsonErrorCompat("Máquina não encontrada ou não vinculada a este POS (pos_device_id).", 404, {
+        code: "machine_not_found",
+        extra: {
+          condominio_id,
+          pos_device_id: posDevice.id,
+          identificador_local,
+        },
       });
     }
-    if (!maquina.ativa) return jsonError("Máquina está inativa.", 409);
-    if (!maquina.gateway_id) return jsonError("Máquina sem gateway_id vinculado.", 409);
+    if (!maquina.ativa) return jsonErrorCompat("Máquina está inativa.", 409, { code: "machine_inactive" });
+    if (!maquina.gateway_id) return jsonErrorCompat("Máquina sem gateway_id vinculado.", 409, { code: "missing_gateway_id" });
 
     // 3) Idempotência (anti retry/duplo clique)
     const minuteBucket = Math.floor(Date.now() / 60000);
     const idempotency_key =
-      (body.idempotency_key || headerIdempotency || "").trim() ||
+      input.idempotency_key ||
       `pos:${pos_serial}:${identificador_local}:${valor_centavos}:${metodo}:${minuteBucket}`;
 
     const { data: existingPay, error: existErr } = await supabase
@@ -121,7 +80,7 @@ export async function POST(req: Request) {
       .eq("idempotency_key", idempotency_key)
       .maybeSingle();
 
-    if (existErr) return jsonError("Erro ao verificar idempotency_key.", 500, { details: existErr.message });
+    if (existErr) return jsonErrorCompat("Erro ao verificar idempotency_key.", 500, { code: "db_error", extra: { details: existErr.message } });
 
     if (existingPay) {
       return NextResponse.json({
@@ -139,17 +98,16 @@ export async function POST(req: Request) {
         condominio_id,
         maquina_id: maquina.id,
         origem: "POS",
-        metodo: metodo,
+        metodo,
         gateway_pagamento: "STONE",
         valor_centavos,
         idempotency_key,
         external_id: null,
-        // status default: CRIADO
       })
       .select("id, status, created_at")
       .single();
 
-    if (payErr) return jsonError("Erro ao criar pagamento.", 500, { details: payErr.message });
+    if (payErr) return jsonErrorCompat("Erro ao criar pagamento.", 500, { code: "db_error", extra: { details: payErr.message } });
 
     // 5) Ciclo (PT-BR)
     const { data: ciclo, error: cicloErr } = await supabase
@@ -158,21 +116,23 @@ export async function POST(req: Request) {
         pagamento_id: pagamento.id,
         condominio_id,
         maquina_id: maquina.id,
-        // status default: AGUARDANDO_LIBERACAO
       })
       .select("id, status, created_at")
       .single();
 
     if (cicloErr) {
-      return jsonError("Pagamento criado, mas falhou ao criar ciclo.", 500, {
-        pagamento_id: pagamento.id,
-        details: cicloErr.message,
+      return jsonErrorCompat("Pagamento criado, mas falhou ao criar ciclo.", 500, {
+        code: "cycle_create_failed",
+        extra: {
+          pagamento_id: pagamento.id,
+          details: cicloErr.message,
+        },
       });
     }
 
     // 6) Comando IoT (PT-BR)
     const cmd_id = crypto.randomUUID();
-    const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 min
+    const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
     const { data: iotCmd, error: cmdErr } = await supabase
       .from("iot_commands")
@@ -186,8 +146,10 @@ export async function POST(req: Request) {
           ciclo_id: ciclo.id,
           pagamento_id: pagamento.id,
           identificador_local: maquina.identificador_local,
-          tipo_maquina: maquina.tipo, // lavadora | secadora
+          tipo_maquina: maquina.tipo,
           metadata,
+          channel: input.channel,
+          origin: input.origin,
         },
         status: "PENDENTE",
         expires_at,
@@ -196,10 +158,13 @@ export async function POST(req: Request) {
       .single();
 
     if (cmdErr) {
-      return jsonError("Pagamento+ciclo criados, mas falhou ao criar iot_command.", 500, {
-        pagamento_id: pagamento.id,
-        ciclo_id: ciclo.id,
-        details: cmdErr.message,
+      return jsonErrorCompat("Pagamento+ciclo criados, mas falhou ao criar iot_command.", 500, {
+        code: "iot_command_create_failed",
+        extra: {
+          pagamento_id: pagamento.id,
+          ciclo_id: ciclo.id,
+          details: cmdErr.message,
+        },
       });
     }
 
@@ -214,6 +179,9 @@ export async function POST(req: Request) {
       expires_at,
     });
   } catch (e: any) {
-    return jsonError("Erro inesperado no authorize.", 500, { details: e?.message ?? String(e) });
+    return jsonErrorCompat("Erro inesperado no authorize.", 500, {
+      code: "internal_error",
+      extra: { details: e?.message ?? String(e) },
+    });
   }
 }

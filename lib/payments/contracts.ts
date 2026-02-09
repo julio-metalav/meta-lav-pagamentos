@@ -1,0 +1,87 @@
+export type Channel = "pos" | "mobile" | "web" | "kiosk";
+export type ServiceType = "lavadora" | "secadora";
+
+export type Origin = {
+  pos_device_id: string | null;
+  user_id: string | null;
+};
+
+export type RequestContext = {
+  channel: Channel;
+  origin: Origin;
+};
+
+export type AuthorizeInput = RequestContext & {
+  pos_serial: string;
+  identificador_local: string;
+  valor_centavos: number;
+  metodo: "PIX" | "CARTAO";
+  idempotency_key: string | null;
+  metadata: Record<string, unknown>;
+};
+
+function toCentavos(body: any): number | null {
+  if (typeof body?.valor_centavos === "number" && Number.isFinite(body.valor_centavos)) {
+    const v = Math.trunc(body.valor_centavos);
+    return v > 0 ? v : null;
+  }
+  if (typeof body?.valor === "number" && Number.isFinite(body.valor)) {
+    const v = Math.round(body.valor * 100);
+    return v > 0 ? v : null;
+  }
+  return null;
+}
+
+function normalizeChannel(v: unknown): Channel {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "mobile" || s === "web" || s === "kiosk") return s;
+  return "pos";
+}
+
+export function parseAuthorizeInput(req: Request, body: any):
+  | { ok: true; data: AuthorizeInput }
+  | { ok: false; code: string; message: string } {
+  const headerPosSerial =
+    req.headers.get("x-pos-serial") ||
+    req.headers.get("x-device-serial") ||
+    req.headers.get("x-serial") ||
+    "";
+
+  const pos_serial = String(body?.pos_serial || headerPosSerial).trim();
+  const identificador_local = String(body?.identificador_local || "").trim();
+  const valor_centavos = toCentavos(body);
+  const metodo = String(body?.metodo || "").trim().toUpperCase();
+
+  const channel = normalizeChannel(body?.channel);
+  const origin: Origin = {
+    pos_device_id: body?.origin?.pos_device_id ? String(body.origin.pos_device_id) : null,
+    user_id: body?.origin?.user_id ? String(body.origin.user_id) : null,
+  };
+
+  // fallback legacy para POS
+  if (!origin.pos_device_id && channel === "pos") {
+    origin.pos_device_id = null;
+  }
+
+  if (!pos_serial) return { ok: false, code: "missing_pos_serial", message: "POS serial ausente (body.pos_serial ou header x-pos-serial)." };
+  if (!identificador_local) return { ok: false, code: "missing_identificador_local", message: "identificador_local ausente (ex.: LAV-01 / SEC-01)." };
+  if (!valor_centavos) return { ok: false, code: "invalid_amount", message: "valor inválido (use valor_centavos ou valor)." };
+  if (metodo !== "PIX" && metodo !== "CARTAO") return { ok: false, code: "invalid_payment_method", message: "metodo inválido (PIX | CARTAO)." };
+
+  const idempotencyHeader = req.headers.get("x-idempotency-key") || req.headers.get("idempotency-key") || "";
+  const idempotency_key = String(body?.idempotency_key || idempotencyHeader || "").trim() || null;
+
+  return {
+    ok: true,
+    data: {
+      channel,
+      origin,
+      pos_serial,
+      identificador_local,
+      valor_centavos,
+      metodo,
+      idempotency_key,
+      metadata: (body?.metadata ?? {}) as Record<string, unknown>,
+    },
+  };
+}
