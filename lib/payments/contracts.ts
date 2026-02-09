@@ -44,6 +44,13 @@ export type PriceInput = RequestContext & {
   };
 };
 
+export type ConfirmInput = RequestContext & {
+  payment_id: string;
+  provider: "stone" | "asaas";
+  provider_ref: string;
+  result: "approved" | "failed";
+};
+
 function toCentavos(body: any): number | null {
   if (typeof body?.valor_centavos === "number" && Number.isFinite(body.valor_centavos)) {
     const v = Math.trunc(body.valor_centavos);
@@ -204,6 +211,40 @@ export function parsePriceInput(body: any):
     data: {
       ...base.data,
       context: { coupon_code },
+    },
+  };
+}
+
+export function parseConfirmInput(body: any):
+  | { ok: true; data: ConfirmInput }
+  | { ok: false; code: string; message: string } {
+  const channel = normalizeChannel(body?.channel);
+  const origin: Origin = {
+    pos_device_id: body?.origin?.pos_device_id ? String(body.origin.pos_device_id) : null,
+    user_id: body?.origin?.user_id ? String(body.origin.user_id) : null,
+  };
+
+  const payment_id = String(body?.payment_id || "").trim();
+  const providerRaw = String(body?.provider || "").trim().toLowerCase();
+  const provider = providerRaw === "asaas" ? "asaas" : providerRaw === "stone" ? "stone" : null;
+  const provider_ref = String(body?.provider_ref || "").trim();
+  const resultRaw = String(body?.result || "").trim().toLowerCase();
+  const result = resultRaw === "approved" ? "approved" : resultRaw === "failed" ? "failed" : null;
+
+  if (!payment_id) return { ok: false, code: "missing_payment_id", message: "payment_id é obrigatório." };
+  if (!provider) return { ok: false, code: "invalid_provider", message: "provider inválido (stone|asaas)." };
+  if (!provider_ref) return { ok: false, code: "missing_provider_ref", message: "provider_ref é obrigatório." };
+  if (!result) return { ok: false, code: "invalid_result", message: "result inválido (approved|failed)." };
+
+  return {
+    ok: true,
+    data: {
+      channel,
+      origin,
+      payment_id,
+      provider,
+      provider_ref,
+      result,
     },
   };
 }
