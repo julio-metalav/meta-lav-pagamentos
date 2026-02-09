@@ -26,6 +26,15 @@ export type AvailabilityInput = RequestContext & {
   service_type: ServiceType;
 };
 
+export type PriceInput = RequestContext & {
+  condominio_id: string;
+  condominio_maquinas_id: string;
+  service_type: ServiceType;
+  context: {
+    coupon_code: string | null;
+  };
+};
+
 function toCentavos(body: any): number | null {
   if (typeof body?.valor_centavos === "number" && Number.isFinite(body.valor_centavos)) {
     const v = Math.trunc(body.valor_centavos);
@@ -127,6 +136,24 @@ export function parseAvailabilityInput(body: any):
       condominio_id,
       condominio_maquinas_id,
       service_type,
+    },
+  };
+}
+
+export function parsePriceInput(body: any):
+  | { ok: true; data: PriceInput }
+  | { ok: false; code: string; message: string } {
+  const base = parseAvailabilityInput(body);
+  if (!base.ok) return base;
+
+  const couponRaw = body?.context?.coupon_code;
+  const coupon_code = couponRaw ? String(couponRaw).trim() : null;
+
+  return {
+    ok: true,
+    data: {
+      ...base.data,
+      context: { coupon_code },
     },
   };
 }
