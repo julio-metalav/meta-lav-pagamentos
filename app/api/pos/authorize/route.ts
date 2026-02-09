@@ -31,7 +31,20 @@ export async function POST(req: Request) {
     }
 
     const input = parsed.data;
-    const { pos_serial, identificador_local, valor_centavos, metodo, metadata } = input;
+    const { pos_serial, identificador_local, valor_centavos, metodo, metadata, quote } = input;
+
+    if (quote) {
+      const validUntilMs = Date.parse(quote.valid_until);
+      if (!Number.isFinite(validUntilMs)) {
+        return jsonErrorCompat("quote invalid", 400, { code: "invalid_quote" });
+      }
+      if (validUntilMs < Date.now()) {
+        return jsonErrorCompat("quote expired", 410, { code: "expired", retry_after_sec: 0 });
+      }
+      if (!String(quote.pricing_hash || "").startsWith("sha256:")) {
+        return jsonErrorCompat("quote integrity invalid", 400, { code: "invalid_quote_hash" });
+      }
+    }
 
     // 1) POS Device
     const { data: posDevice, error: posErr } = await supabase
@@ -148,6 +161,7 @@ export async function POST(req: Request) {
           identificador_local: maquina.identificador_local,
           tipo_maquina: maquina.tipo,
           metadata,
+          quote,
           channel: input.channel,
           origin: input.origin,
         },

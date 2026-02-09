@@ -11,6 +11,14 @@ export type RequestContext = {
   origin: Origin;
 };
 
+export type QuoteRef = {
+  quote_id: string;
+  amount: number;
+  valid_until: string;
+  pricing_hash: string;
+  rule_id?: string | null;
+};
+
 export type AuthorizeInput = RequestContext & {
   pos_serial: string;
   identificador_local: string;
@@ -18,6 +26,7 @@ export type AuthorizeInput = RequestContext & {
   metodo: "PIX" | "CARTAO";
   idempotency_key: string | null;
   metadata: Record<string, unknown>;
+  quote: QuoteRef | null;
 };
 
 export type AvailabilityInput = RequestContext & {
@@ -61,7 +70,33 @@ function normalizeServiceType(v: unknown): ServiceType | null {
   return null;
 }
 
-export function parseAuthorizeInput(req: Request, body: any):
+function parseQuoteRef(body: any): QuoteRef | null {
+  const quote = body?.quote ?? null;
+  if (!quote || typeof quote !== "object") return null;
+
+  const quote_id = String(quote.quote_id ?? "").trim();
+  const amount = Number(quote.amount);
+  const valid_until = String(quote.valid_until ?? "").trim();
+  const pricing_hash = String(quote.pricing_hash ?? "").trim();
+  const rule_id = quote.rule_id ? String(quote.rule_id) : null;
+
+  if (!quote_id || !Number.isFinite(amount) || amount <= 0 || !valid_until || !pricing_hash) {
+    return null;
+  }
+
+  return {
+    quote_id,
+    amount,
+    valid_until,
+    pricing_hash,
+    rule_id,
+  };
+}
+
+export function parseAuthorizeInput(
+  req: Request,
+  body: any
+):
   | { ok: true; data: AuthorizeInput }
   | { ok: false; code: string; message: string } {
   const headerPosSerial =
@@ -72,7 +107,6 @@ export function parseAuthorizeInput(req: Request, body: any):
 
   const pos_serial = String(body?.pos_serial || headerPosSerial).trim();
   const identificador_local = String(body?.identificador_local || "").trim();
-  const valor_centavos = toCentavos(body);
   const metodo = String(body?.metodo || "").trim().toUpperCase();
 
   const channel = normalizeChannel(body?.channel);
@@ -81,15 +115,30 @@ export function parseAuthorizeInput(req: Request, body: any):
     user_id: body?.origin?.user_id ? String(body.origin.user_id) : null,
   };
 
-  // fallback legacy para POS
-  if (!origin.pos_device_id && channel === "pos") {
-    origin.pos_device_id = null;
-  }
+  const quote = parseQuoteRef(body);
+  const valor_centavos_from_body = toCentavos(body);
+  const valor_centavos = quote ? Math.round(quote.amount * 100) : valor_centavos_from_body;
 
-  if (!pos_serial) return { ok: false, code: "missing_pos_serial", message: "POS serial ausente (body.pos_serial ou header x-pos-serial)." };
-  if (!identificador_local) return { ok: false, code: "missing_identificador_local", message: "identificador_local ausente (ex.: LAV-01 / SEC-01)." };
-  if (!valor_centavos) return { ok: false, code: "invalid_amount", message: "valor inválido (use valor_centavos ou valor)." };
-  if (metodo !== "PIX" && metodo !== "CARTAO") return { ok: false, code: "invalid_payment_method", message: "metodo inválido (PIX | CARTAO)." };
+  if (!pos_serial)
+    return {
+      ok: false,
+      code: "missing_pos_serial",
+      message: "POS serial ausente (body.pos_serial ou header x-pos-serial).",
+    };
+  if (!identificador_local)
+    return {
+      ok: false,
+      code: "missing_identificador_local",
+      message: "identificador_local ausente (ex.: LAV-01 / SEC-01).",
+    };
+  if (!valor_centavos)
+    return {
+      ok: false,
+      code: "invalid_amount",
+      message: "valor inválido (use valor_centavos/valor legado ou quote.amount).",
+    };
+  if (metodo !== "PIX" && metodo !== "CARTAO")
+    return { ok: false, code: "invalid_payment_method", message: "metodo inválido (PIX | CARTAO)." };
 
   const idempotencyHeader = req.headers.get("x-idempotency-key") || req.headers.get("idempotency-key") || "";
   const idempotency_key = String(body?.idempotency_key || idempotencyHeader || "").trim() || null;
@@ -105,6 +154,7 @@ export function parseAuthorizeInput(req: Request, body: any):
       metodo,
       idempotency_key,
       metadata: (body?.metadata ?? {}) as Record<string, unknown>,
+      quote,
     },
   };
 }
