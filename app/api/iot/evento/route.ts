@@ -75,16 +75,9 @@ export async function POST(req: Request) {
     const debugOn = process.env.DEBUG_HMAC === "1";
     console.log("[IOT_EVENTO] invalid_hmac", {
       serial: debug.serial,
-      serialNorm: debug.serialNorm,
       ts: debug.ts,
       rawBodyLen: debug.rawBodyLen,
-      secretSource: debug.secretSource,
-      expectedHead: debug.expectedHead,
-      receivedHead: debug.receivedHead,
-      envHasGeneric: debug.envHasGeneric,
-      envHasPerSerial: debug.envHasPerSerial,
-      baseHead: debug.baseHead,
-      rawBodyHead: debug.rawBodyHead,
+      error: debug.error,
     });
 
     return json(401, {
