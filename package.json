@@ -6,21 +6,27 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "anti-legado": "node scripts/anti-legado.js",
+    "hardening": "node scripts/hardening.js",
+    "check": "npm run anti-legado && npm run hardening",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.93.1",
     "next": "16.1.5",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.95.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.5",
+    "js-yaml": "^4.1.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
