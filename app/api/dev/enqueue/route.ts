@@ -1,83 +1,10 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import crypto from "crypto";
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
-
-function bad(message: string, status = 400) {
-  return NextResponse.json({ ok: false, error: message }, { status });
-}
-
-function mustDev(req: Request) {
-  if (process.env.NODE_ENV === "production") return false;
-  const secret = process.env.DEV_ENQUEUE_SECRET;
-  if (!secret) return true;
-  const got = req.headers.get("x-dev-secret") || "";
-  return got === secret;
-}
+import { enqueueDevCommand } from "@/lib/dev/enqueue";
 
 export async function POST(req: Request) {
-  try {
-    if (!mustDev(req)) return bad("Não autorizado", 401);
-
-    const body = await req.json().catch(() => ({}));
-    const serial = String(body.serial || "").trim();
-    const tipo = String(body.type || body.tipo || "PULSE").trim().toUpperCase();
-    const payload = body.payload ?? { pulses: 1 };
-    const condominioMaquinasIdInput = String(body.condominio_maquinas_id || "").trim();
-
-    if (!serial) return bad("serial é obrigatório");
-
-    const admin = supabaseAdmin();
-
-    const { data: gw, error: gwErr } = await admin
-      .from("gateways")
-      .select("id, serial")
-      .eq("serial", serial)
-      .maybeSingle();
-
-    if (gwErr) return bad(gwErr.message, 500);
-    if (!gw?.id) return bad("gateway não encontrado para serial informado", 404);
-
-    let condominioMaquinasId = condominioMaquinasIdInput;
-
-    if (!condominioMaquinasId) {
-      const { data: maq, error: maqErr } = await admin
-        .from("condominio_maquinas")
-        .select("id, gateway_id, ativa, identificador_local, tipo")
-        .eq("gateway_id", gw.id)
-        .eq("ativa", true)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (maqErr) return bad(maqErr.message, 500);
-      if (!maq?.id) return bad("nenhuma máquina ativa vinculada ao gateway", 409);
-      condominioMaquinasId = maq.id;
-    }
-
-    const cmd_id = crypto.randomUUID();
-    const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-
-    const { data, error } = await admin
-      .from("iot_commands")
-      .insert({
-        gateway_id: gw.id,
-        condominio_maquinas_id: condominioMaquinasId,
-        cmd_id,
-        tipo,
-        payload,
-        status: "PENDENTE",
-        expires_at,
-      })
-      .select("id, cmd_id, gateway_id, condominio_maquinas_id, tipo, payload, status, created_at")
-      .single();
-
-    if (error) return bad(error.message, 500);
-
-    return NextResponse.json({ ok: true, queued: data });
-  } catch (e: any) {
-    return bad(e?.message || "Erro interno", 500);
-  }
+  const result = await enqueueDevCommand(req);
+  return NextResponse.json(result.body, { status: result.status });
 }
