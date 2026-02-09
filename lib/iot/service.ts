@@ -141,8 +141,127 @@ export async function pollCommands(input: PollInput): Promise<PollOk | PollErr> 
   }
 }
 
-export async function ackCommand() {
-  throw new Error("NOT_IMPLEMENTED");
+type AckInput = {
+  req: Request;
+};
+
+type AckOk = {
+  status: 200;
+  body: {
+    ok: true;
+    serial: string;
+    cmd_id: string;
+    status: "ACK" | "FALHOU";
+  };
+};
+
+type AckErr = {
+  status: number;
+  body: {
+    ok: false;
+    error: string;
+    detail?: string;
+    [k: string]: unknown;
+  };
+};
+
+export async function ackCommand(input: AckInput): Promise<AckOk | AckErr> {
+  try {
+    const rawBody = await input.req.text();
+
+    // Auth HMAC (mesmo padrão do /poll)
+    const auth = authenticateGateway(input.req, rawBody);
+    if (!auth.ok) {
+      return {
+        status: auth.status ?? 401,
+        body: {
+          ok: false,
+          error: auth.error,
+          ...(auth.detail ? { detail: auth.detail } : {}),
+        },
+      };
+    }
+
+    const serial = auth.serial;
+
+    // Parse JSON
+    let data: any = {};
+    try {
+      data = JSON.parse(rawBody || "{}");
+    } catch {
+      return bad("invalid_json");
+    }
+
+    const cmdId = String(data?.cmd_id ?? "");
+    const ok = data?.ok;
+    const ts = Number.parseInt(String(data?.ts ?? ""), 10);
+
+    if (!cmdId) return bad("invalid_payload", 400, { detail: "cmd_id obrigatório" });
+    if (typeof ok !== "boolean") return bad("invalid_payload", 400, { detail: "ok deve ser boolean" });
+    if (!Number.isFinite(ts)) return bad("invalid_payload", 400, { detail: "ts inválido" });
+
+    const machineId = data?.machine_id ? String(data.machine_id) : null;
+    const code = data?.code ? String(data.code) : null;
+
+    const admin = supabaseAdmin() as any;
+    const nowIso = new Date().toISOString();
+    const createdAtIso = new Date(ts * 1000).toISOString();
+
+    // Carrega gateway por serial
+    const { data: gw, error: gwErr } = await admin
+      .from("gateways")
+      .select("id, serial")
+      .eq("serial", serial)
+      .maybeSingle();
+
+    if (gwErr) return bad("db_error", 500, { detail: gwErr.message });
+    if (!gw) return bad("gateway_not_found", 404);
+
+    // Busca comando no schema PT-BR
+    const { data: cmdRow, error: cmdErr } = await admin
+      .from("iot_commands")
+      .select("id, cmd_id, tipo, status, condominio_maquinas_id")
+      .eq("gateway_id", gw.id)
+      .eq("cmd_id", cmdId)
+      .maybeSingle();
+
+    if (cmdErr) return bad("db_error", 500, { detail: cmdErr.message });
+    if (!cmdRow) return bad("cmd_not_found", 404);
+
+    const cmdTipo = String(cmdRow.tipo ?? "UNKNOWN");
+
+    // Log ACK
+    const { error: ackErr } = await admin.from("iot_acks").insert({
+      serial,
+      machine_id: machineId,
+      cmd_id: cmdId,
+      cmd: cmdTipo,
+      ok,
+      code: code ?? null,
+      payload: data,
+      created_at: createdAtIso,
+    });
+
+    if (ackErr) return bad("db_error", 500, { detail: ackErr.message });
+
+    // Atualiza comando
+    const newStatus: "ACK" | "FALHOU" = ok ? "ACK" : "FALHOU";
+
+    const { error: upErr } = await admin
+      .from("iot_commands")
+      .update({ status: newStatus, ack_at: nowIso })
+      .eq("id", cmdRow.id)
+      .eq("gateway_id", gw.id);
+
+    if (upErr) return bad("db_error", 500, { detail: upErr.message });
+
+    // last_seen_at best effort
+    await admin.from("gateways").update({ last_seen_at: nowIso }).eq("id", gw.id);
+
+    return { status: 200, body: { ok: true, serial, cmd_id: cmdId, status: newStatus } };
+  } catch (e: any) {
+    return bad("internal_error", 500, { detail: String(e?.message ?? e) });
+  }
 }
 
 export async function recordEvento() {
