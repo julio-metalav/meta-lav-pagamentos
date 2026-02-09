@@ -20,6 +20,12 @@ export type AuthorizeInput = RequestContext & {
   metadata: Record<string, unknown>;
 };
 
+export type AvailabilityInput = RequestContext & {
+  condominio_id: string;
+  condominio_maquinas_id: string;
+  service_type: ServiceType;
+};
+
 function toCentavos(body: any): number | null {
   if (typeof body?.valor_centavos === "number" && Number.isFinite(body.valor_centavos)) {
     const v = Math.trunc(body.valor_centavos);
@@ -36,6 +42,14 @@ function normalizeChannel(v: unknown): Channel {
   const s = String(v ?? "").trim().toLowerCase();
   if (s === "mobile" || s === "web" || s === "kiosk") return s;
   return "pos";
+}
+
+function normalizeServiceType(v: unknown): ServiceType | null {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "lavadora" || s === "secadora") return s;
+  if (s === "lavar") return "lavadora";
+  if (s === "secar") return "secadora";
+  return null;
 }
 
 export function parseAuthorizeInput(req: Request, body: any):
@@ -82,6 +96,37 @@ export function parseAuthorizeInput(req: Request, body: any):
       metodo,
       idempotency_key,
       metadata: (body?.metadata ?? {}) as Record<string, unknown>,
+    },
+  };
+}
+
+export function parseAvailabilityInput(body: any):
+  | { ok: true; data: AvailabilityInput }
+  | { ok: false; code: string; message: string } {
+  const channel = normalizeChannel(body?.channel);
+  const origin: Origin = {
+    pos_device_id: body?.origin?.pos_device_id ? String(body.origin.pos_device_id) : null,
+    user_id: body?.origin?.user_id ? String(body.origin.user_id) : null,
+  };
+
+  const condominio_id = String(body?.condominio_id || "").trim();
+  const condominio_maquinas_id = String(body?.condominio_maquinas_id || "").trim();
+  const service_type = normalizeServiceType(body?.service_type);
+
+  if (!condominio_id) return { ok: false, code: "missing_condominio_id", message: "condominio_id é obrigatório." };
+  if (!condominio_maquinas_id)
+    return { ok: false, code: "missing_condominio_maquinas_id", message: "condominio_maquinas_id é obrigatório." };
+  if (!service_type)
+    return { ok: false, code: "invalid_service_type", message: "service_type inválido (lavadora|secadora)." };
+
+  return {
+    ok: true,
+    data: {
+      channel,
+      origin,
+      condominio_id,
+      condominio_maquinas_id,
+      service_type,
     },
   };
 }
