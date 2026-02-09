@@ -51,6 +51,12 @@ export type ConfirmInput = RequestContext & {
   result: "approved" | "failed";
 };
 
+export type ExecuteCycleInput = RequestContext & {
+  idempotency_key: string;
+  payment_id: string;
+  condominio_maquinas_id: string;
+};
+
 function toCentavos(body: any): number | null {
   if (typeof body?.valor_centavos === "number" && Number.isFinite(body.valor_centavos)) {
     const v = Math.trunc(body.valor_centavos);
@@ -245,6 +251,36 @@ export function parseConfirmInput(body: any):
       provider,
       provider_ref,
       result,
+    },
+  };
+}
+
+export function parseExecuteCycleInput(body: any):
+  | { ok: true; data: ExecuteCycleInput }
+  | { ok: false; code: string; message: string } {
+  const channel = normalizeChannel(body?.channel);
+  const origin: Origin = {
+    pos_device_id: body?.origin?.pos_device_id ? String(body.origin.pos_device_id) : null,
+    user_id: body?.origin?.user_id ? String(body.origin.user_id) : null,
+  };
+
+  const idempotency_key = String(body?.idempotency_key || "").trim();
+  const payment_id = String(body?.payment_id || "").trim();
+  const condominio_maquinas_id = String(body?.condominio_maquinas_id || "").trim();
+
+  if (!idempotency_key) return { ok: false, code: "missing_idempotency_key", message: "idempotency_key é obrigatório." };
+  if (!payment_id) return { ok: false, code: "missing_payment_id", message: "payment_id é obrigatório." };
+  if (!condominio_maquinas_id)
+    return { ok: false, code: "missing_condominio_maquinas_id", message: "condominio_maquinas_id é obrigatório." };
+
+  return {
+    ok: true,
+    data: {
+      channel,
+      origin,
+      idempotency_key,
+      payment_id,
+      condominio_maquinas_id,
     },
   };
 }
