@@ -288,6 +288,9 @@ function pickCicloIdFromCmd(cmdRow: any): string {
 type EventoInput = { req: Request };
 type EventoResult = { status: number; body: Record<string, unknown> };
 
+type HeartbeatInput = { req: Request };
+type HeartbeatResult = { status: number; body: Record<string, unknown> };
+
 export async function recordEvento(input: EventoInput): Promise<EventoResult> {
   const req = input.req;
   const serial = (req.headers.get("x-gw-serial") || "").trim();
@@ -562,4 +565,47 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
   }
 
   return { status: 200, body: { ok: true, evento_id: evPt.id, created_at: evPt.created_at, legacy_evento_id: evLegacy.id } };
+}
+
+export async function heartbeatGateway(input: HeartbeatInput): Promise<HeartbeatResult> {
+  const req = input.req;
+  const serial = req.headers.get("x-gw-serial") || "";
+  const ts = req.headers.get("x-gw-ts") || "";
+  const sign = req.headers.get("x-gw-sign") || "";
+
+  if (!serial || !ts || !sign) {
+    return { status: 400, body: { ok: false, error: "headers_missing" } };
+  }
+
+  const rawBody = await req.text();
+  const auth = authenticateGateway(req, rawBody);
+  if (!auth.ok) {
+    return { status: 401, body: { ok: false, error: "invalid_hmac" } };
+  }
+
+  let payload: any = null;
+  if (rawBody && rawBody.trim().length > 0) {
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return { status: 400, body: { ok: false, error: "invalid_json" } };
+    }
+  }
+
+  try {
+    const admin = supabaseAdmin();
+    await admin.from("gateways").update({ last_seen_at: new Date().toISOString() }).eq("serial", auth.serial);
+  } catch {
+    // best effort
+  }
+
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      serial: auth.serial,
+      ts: Number.parseInt(ts, 10),
+      payload,
+    },
+  };
 }
