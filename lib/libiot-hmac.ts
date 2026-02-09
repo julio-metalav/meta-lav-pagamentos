@@ -68,7 +68,7 @@ export function verifyHmac(args: VerifyArgs): VerifyResult {
   const secretSource: VerifyDebug["secretSource"] =
     perSerialSecret ? "per-serial" : genericSecret ? "generic" : "missing";
 
-  const base = `${ts}.${rawBody}`;
+  const base = `${serial}.${ts}.${rawBody}`;
 
   // expected só se tiver secret e headers mínimos
   let expected = "";

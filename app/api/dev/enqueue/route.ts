@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -9,13 +10,9 @@ function bad(message: string, status = 400) {
 }
 
 function mustDev(req: Request) {
-  // Trava em produção
   if (process.env.NODE_ENV === "production") return false;
-
-  // Se você setar DEV_ENQUEUE_SECRET, exige header
   const secret = process.env.DEV_ENQUEUE_SECRET;
   if (!secret) return true;
-
   const got = req.headers.get("x-dev-secret") || "";
   return got === secret;
 }
@@ -26,28 +23,55 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const serial = String(body.serial || "").trim();
-    const type = String(body.type || "PULSE").trim();
+    const tipo = String(body.type || body.tipo || "PULSE").trim().toUpperCase();
     const payload = body.payload ?? { pulses: 1 };
+    const condominioMaquinasIdInput = String(body.condominio_maquinas_id || "").trim();
 
     if (!serial) return bad("serial é obrigatório");
 
     const admin = supabaseAdmin();
 
-    // garante gateway existe
-    const nowIso = new Date().toISOString();
-    await admin
+    const { data: gw, error: gwErr } = await admin
       .from("gateways")
-      .upsert({ serial, last_seen_at: nowIso }, { onConflict: "serial" });
+      .select("id, serial")
+      .eq("serial", serial)
+      .maybeSingle();
+
+    if (gwErr) return bad(gwErr.message, 500);
+    if (!gw?.id) return bad("gateway não encontrado para serial informado", 404);
+
+    let condominioMaquinasId = condominioMaquinasIdInput;
+
+    if (!condominioMaquinasId) {
+      const { data: maq, error: maqErr } = await admin
+        .from("condominio_maquinas")
+        .select("id, gateway_id, ativa, identificador_local, tipo")
+        .eq("gateway_id", gw.id)
+        .eq("ativa", true)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (maqErr) return bad(maqErr.message, 500);
+      if (!maq?.id) return bad("nenhuma máquina ativa vinculada ao gateway", 409);
+      condominioMaquinasId = maq.id;
+    }
+
+    const cmd_id = crypto.randomUUID();
+    const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
     const { data, error } = await admin
-      .from("gateway_commands")
+      .from("iot_commands")
       .insert({
-        gateway_serial: serial,
-        type,
+        gateway_id: gw.id,
+        condominio_maquinas_id: condominioMaquinasId,
+        cmd_id,
+        tipo,
         payload,
-        status: "pending",
+        status: "pendente",
+        expires_at,
       })
-      .select("id, gateway_serial, type, payload, status, created_at")
+      .select("id, cmd_id, gateway_id, condominio_maquinas_id, tipo, payload, status, created_at")
       .single();
 
     if (error) return bad(error.message, 500);
