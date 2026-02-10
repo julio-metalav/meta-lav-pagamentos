@@ -24,6 +24,8 @@ export default function DashboardPage() {
 
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [replayBusyId, setReplayBusyId] = useState<string | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchSummary, setBatchSummary] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -69,6 +71,27 @@ export default function DashboardPage() {
       setMessage(e?.message || "Erro no replay da DLQ.");
     } finally {
       setReplayBusyId(null);
+    }
+  }
+
+  async function replayBatch() {
+    setBatchBusy(true);
+    setMessage(null);
+    setBatchSummary(null);
+    try {
+      const r = await fetch("/api/admin/alerts/replay-batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "pending", limit: 10, actor: "dashboard" }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j?.ok) throw new Error(j?.error_v1?.message || j?.error || "Falha no replay em lote");
+      setBatchSummary(`Lote: processed=${j.processed} · replayed=${j.replayed} · failed=${j.failed}`);
+      await load();
+    } catch (e: any) {
+      setMessage(e?.message || "Erro no replay em lote.");
+    } finally {
+      setBatchBusy(false);
     }
   }
 
@@ -129,9 +152,22 @@ export default function DashboardPage() {
       {alertsOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 p-4 flex items-center justify-center">
           <div className="w-full max-w-6xl bg-white rounded-2xl border border-zinc-200 shadow-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-zinc-100 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h2 className="text-lg font-semibold">Drill-down · Alertas</h2>
-              <button onClick={() => setAlertsOpen(false)} className="text-zinc-500 hover:text-zinc-700">✕</button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={replayBatch}
+                  disabled={batchBusy}
+                  className="rounded-md border border-blue-300 text-blue-700 px-3 py-1.5 text-xs hover:bg-blue-50 disabled:opacity-50"
+                >
+                  {batchBusy ? "Processando lote..." : "Replay pendentes (lote)"}
+                </button>
+                <button onClick={() => setAlertsOpen(false)} className="text-zinc-500 hover:text-zinc-700">✕</button>
+              </div>
+            </div>
+
+            <div className="px-5 pt-3">
+              {batchSummary && <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700">{batchSummary}</div>}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-5">
