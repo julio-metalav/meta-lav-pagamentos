@@ -51,6 +51,7 @@ export default function AdminAlertRoutesPage() {
   const [items, setItems] = useState<AlertRoute[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testingRouteId, setTestingRouteId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const [filterEnabled, setFilterEnabled] = useState<"all" | "enabled" | "disabled">("all");
@@ -191,6 +192,28 @@ export default function AdminAlertRoutesPage() {
     }
   }
 
+  async function testRoute(item: AlertRoute) {
+    setTestingRouteId(item.id);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/alert-routes/test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ route_id: item.id, actor: "admin-ui" }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.error_v1?.message || data?.error || "Falha ao testar rota");
+
+      const mode = data?.simulated ? "simulado" : "real";
+      setMessage(`Teste (${mode}) executado em ${item.channel}/${item.target}: ${data?.dispatch_status || "ok"}.`);
+    } catch (e: any) {
+      setMessage(e?.message || "Erro ao testar rota.");
+    } finally {
+      setTestingRouteId(null);
+    }
+  }
+
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return items;
@@ -319,6 +342,13 @@ export default function AdminAlertRoutesPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => testRoute(r)}
+                            disabled={testingRouteId === r.id}
+                            className="rounded-md border border-blue-300 text-blue-700 px-3 py-1.5 text-xs hover:bg-blue-50 disabled:opacity-50"
+                          >
+                            {testingRouteId === r.id ? "Testando..." : "Testar"}
+                          </button>
                           <button onClick={() => openEdit(r)} className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs hover:bg-zinc-50">Editar</button>
                           <button onClick={() => onDelete(r.id)} className="rounded-md border border-red-300 text-red-700 px-3 py-1.5 text-xs hover:bg-red-50">Remover</button>
                         </div>
