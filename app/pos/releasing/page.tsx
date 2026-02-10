@@ -49,10 +49,17 @@ export default function PosReleasingPage() {
 
         if (!cancelled) {
           setMessage("Máquina liberada com sucesso");
+          const method = sp.get("method") || "PIX";
+          const identificador_local = sp.get("identificador_local") || "";
+          const tipo = sp.get("tipo") || "lavadora";
+          const amount = sp.get("amount") || "0";
+
           router.replace(
             `/pos/released?condominio_id=${encodeURIComponent(condominio_id)}&pos_serial=${encodeURIComponent(pos_serial)}&payment_id=${encodeURIComponent(
               payment_id
-            )}&machine_id=${encodeURIComponent(machine_id)}&command_id=${encodeURIComponent(String(data.command_id || ""))}`
+            )}&machine_id=${encodeURIComponent(machine_id)}&command_id=${encodeURIComponent(String(data.command_id || ""))}&method=${encodeURIComponent(
+              method
+            )}&identificador_local=${encodeURIComponent(identificador_local)}&tipo=${encodeURIComponent(tipo)}&amount=${encodeURIComponent(amount)}`
           );
         }
       } catch (e: any) {

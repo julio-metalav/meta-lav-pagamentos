@@ -10,6 +10,11 @@ export default function PosReleasedPage() {
   const pos_serial = sp.get("pos_serial") || "";
   const payment_id = sp.get("payment_id") || "";
   const command_id = sp.get("command_id") || "";
+  const machine_id = sp.get("machine_id") || "";
+  const method = sp.get("method") || "PIX";
+  const identificador_local = sp.get("identificador_local") || "";
+  const tipo = sp.get("tipo") || "lavadora";
+  const amount = sp.get("amount") || "0";
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 flex items-center justify-center">
@@ -25,12 +30,29 @@ export default function PosReleasedPage() {
           <p>command_id: {command_id || "N/A"}</p>
         </div>
 
-        <button
-          className="rounded-lg bg-[var(--brand-primary)] text-white py-3 font-bold"
-          onClick={() => router.push(`/pos/machines?condominio_id=${encodeURIComponent(condominio_id)}&pos_serial=${encodeURIComponent(pos_serial)}`)}
-        >
-          Voltar para lista de máquinas
-        </button>
+        <div className="grid grid-cols-1 gap-2">
+          <button
+            className="rounded-lg bg-[var(--brand-primary)] text-white py-3 font-bold"
+            onClick={() =>
+              router.push(
+                `/pos/receipt?condominio_id=${encodeURIComponent(condominio_id)}&pos_serial=${encodeURIComponent(pos_serial)}&payment_id=${encodeURIComponent(
+                  payment_id
+                )}&machine_id=${encodeURIComponent(machine_id)}&command_id=${encodeURIComponent(command_id)}&method=${encodeURIComponent(
+                  method
+                )}&identificador_local=${encodeURIComponent(identificador_local)}&tipo=${encodeURIComponent(tipo)}&amount=${encodeURIComponent(amount)}`
+              )
+            }
+          >
+            Ver comprovante
+          </button>
+
+          <button
+            className="rounded-lg border border-[var(--border)] py-3"
+            onClick={() => router.push(`/pos/machines?condominio_id=${encodeURIComponent(condominio_id)}&pos_serial=${encodeURIComponent(pos_serial)}`)}
+          >
+            Voltar para lista de máquinas
+          </button>
+        </div>
       </div>
     </div>
   );
