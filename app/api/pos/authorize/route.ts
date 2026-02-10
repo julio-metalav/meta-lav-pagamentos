@@ -1,4 +1,5 @@
 // app/api/pos/authorize/route.ts
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
@@ -24,7 +25,12 @@ export async function POST(req: Request) {
       body = {};
     }
 
-    const parsed = parseAuthorizeInput(req, body as Record<string, unknown>);
+    const bodyObj = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+    const correlation_id = String(
+      req.headers.get("x-correlation-id") || bodyObj.correlation_id || bodyObj.request_id || crypto.randomUUID()
+    ).trim();
+
+    const parsed = parseAuthorizeInput(req, bodyObj);
     if (!parsed.ok) {
       return jsonErrorCompat(parsed.message, 400, { code: parsed.code });
     }
@@ -110,6 +116,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         ok: true,
         reused: true,
+        correlation_id,
         pagamento_id: existingPay.id,
         pagamento_status: existingPay.status,
       });
@@ -136,6 +143,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       reused: false,
+      correlation_id,
       pagamento_id: pagamento.id,
       pagamento_status: pagamento.status,
     });

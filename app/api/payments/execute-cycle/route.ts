@@ -12,7 +12,12 @@ const PENDING_TTL_SEC = Number(process.env.PAYMENTS_PENDING_TTL_SEC || 300);
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const parsed = parseExecuteCycleInput(body);
+    const bodyObj = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+    const correlation_id = String(
+      req.headers.get("x-correlation-id") || bodyObj.correlation_id || bodyObj.request_id || crypto.randomUUID()
+    ).trim();
+
+    const parsed = parseExecuteCycleInput(bodyObj);
     if (!parsed.ok) return jsonErrorCompat(parsed.message, 400, { code: parsed.code });
 
     const input = parsed.data;
@@ -118,6 +123,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         ok: true,
         replay: true,
+        correlation_id,
         cycle_id: cycleId,
         command_id: existingCmdByCycle.cmd_id,
         status: "queued",
@@ -155,6 +161,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      correlation_id,
       cycle_id: cycleId,
       command_id: cmd_id,
       status: "queued",

@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
@@ -13,7 +14,12 @@ function providerToGateway(provider: "stone" | "asaas"): "STONE" | "ASAAS" {
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const parsed = parseConfirmInput(body);
+    const bodyObj = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+    const correlation_id = String(
+      req.headers.get("x-correlation-id") || bodyObj.correlation_id || bodyObj.request_id || crypto.randomUUID()
+    ).trim();
+
+    const parsed = parseConfirmInput(bodyObj);
     if (!parsed.ok) return jsonErrorCompat(parsed.message, 400, { code: parsed.code });
 
     const input = parsed.data;
@@ -36,6 +42,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         ok: true,
         replay: true,
+        correlation_id,
         payment_id: replayByRef.id,
         status: replayByRef.status,
       });
@@ -55,6 +62,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         ok: true,
         replay: true,
+        correlation_id,
         payment_id: pay.id,
         status: pay.status,
       });
@@ -65,6 +73,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         ok: true,
         replay: true,
+        correlation_id,
         payment_id: pay.id,
         status: pay.status,
       });
@@ -90,6 +99,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      correlation_id,
       payment_id: updated.id,
       status: String(updated.status || "").toLowerCase() === "pago" ? "confirmed" : "failed",
     });
