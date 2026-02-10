@@ -130,10 +130,8 @@ async function dispatchAlertsForRoutes(params: {
   const activeRoutes = (routes || []) as Array<any>;
   if (!activeRoutes.length) return { attempted: 0, sent: 0, failed: 0 };
 
-  const simulateSuccess = String(process.env.PAYMENTS_ALERT_DISPATCH_SIMULATE || "true").toLowerCase() !== "false";
-
   let attempted = 0;
-  let sent = 0;
+  let queued = 0;
   let failed = 0;
 
   for (const alert of alerts) {
@@ -142,22 +140,23 @@ async function dispatchAlertsForRoutes(params: {
       attempted += 1;
 
       const fingerprint = makeAlertFingerprint({ code: alert.code, level: alert.level, snapshot });
+      const text = `ALERTA ${alert.code} (${alert.level}) | ${alert.message}`;
 
-      if (simulateSuccess) {
-        sent += 1;
-        await admin.from("alert_dispatch_log").insert({
-          event_code: alert.code,
-          severity: toSeverity(alert.level),
-          fingerprint,
-          channel: route.channel,
-          target: route.target,
-          status: "sent",
-          error: null,
-        });
-        await resolveDlqOnSuccess(admin, route, fingerprint);
-      } else {
+      // Enfileira no outbox para o dispatcher do OpenClaw enviar de fato.
+      const { error: outErr } = await admin.from("alert_outbox").insert({
+        event_code: alert.code,
+        severity: toSeverity(alert.level),
+        fingerprint,
+        channel: route.channel,
+        target: route.target,
+        text,
+        status: "pending",
+        attempts: 0,
+      });
+
+      if (outErr) {
         failed += 1;
-        const reason = "dispatch_transport_not_implemented";
+        const reason = `outbox_enqueue_failed:${outErr.message}`;
         await admin.from("alert_dispatch_log").insert({
           event_code: alert.code,
           severity: toSeverity(alert.level),
@@ -168,11 +167,23 @@ async function dispatchAlertsForRoutes(params: {
           error: reason,
         });
         await upsertDlqOnFailure(admin, { route, alert, fingerprint, snapshot, reason });
+        continue;
       }
+
+      queued += 1;
+      await admin.from("alert_dispatch_log").insert({
+        event_code: alert.code,
+        severity: toSeverity(alert.level),
+        fingerprint,
+        channel: route.channel,
+        target: route.target,
+        status: "skipped_dedupe",
+        error: "queued_outbox",
+      });
     }
   }
 
-  return { attempted, sent, failed };
+  return { attempted, queued, failed };
 }
 
 async function postJson(url: string, token: string, payload: Record<string, unknown>) {

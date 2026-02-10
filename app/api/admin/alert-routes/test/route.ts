@@ -93,45 +93,47 @@ export async function POST(req: Request) {
       .update(JSON.stringify({ type: "route_test", route_id: route.id, ts_min: Math.floor(Date.now() / 60000) }))
       .digest("hex");
 
-    // "Real" no sentido operacional: tenta dispatch no modo atual do ambiente.
-    // Se PAYMENTS_ALERT_DISPATCH_SIMULATE=false, sem transport implementado -> falha (vai para DLQ).
-    const simulateSuccess = String(process.env.PAYMENTS_ALERT_DISPATCH_SIMULATE || "true").toLowerCase() !== "false";
+    // Enfileira no outbox (dispatcher OpenClaw envia de fato).
+    const text = `TESTE ALERTA (${eventCode}) via ${route.channel} -> ${route.target}`;
 
-    if (simulateSuccess) {
+    const { error: outErr } = await admin.from("alert_outbox").insert({
+      event_code: eventCode,
+      severity,
+      fingerprint,
+      channel: route.channel,
+      target: route.target,
+      text,
+      status: "pending",
+      attempts: 0,
+    });
+
+    if (outErr) {
+      const reason = `outbox_enqueue_failed:${outErr.message}`;
       await admin.from("alert_dispatch_log").insert({
         event_code: eventCode,
         severity,
         fingerprint,
         channel: route.channel,
         target: route.target,
-        status: "sent",
-        error: null,
+        status: "failed",
+        error: reason,
       });
 
-      // resolve eventual item pendente da mesma rota/fingerprint
-      await admin
-        .from("alert_dlq")
-        .update({
-          status: "resolved",
-          resolved_at: new Date().toISOString(),
-          resolved_by: actor,
-          notes: `[${new Date().toISOString()}] resolved by manual route test`,
-        })
-        .eq("channel", route.channel)
-        .eq("target", route.target)
-        .eq("fingerprint", fingerprint)
-        .in("status", ["pending", "retrying", "dead"]);
+      await upsertDlqOnFailure(admin, {
+        route,
+        eventCode,
+        severity,
+        fingerprint,
+        reason,
+      });
 
       return NextResponse.json({
         ok: true,
         route_id: route.id,
-        simulated: true,
-        dispatch_status: "sent",
-        message: "Teste executado com sucesso (modo simulado).",
+        dispatch_status: "failed",
+        message: "Teste falhou ao enfileirar no outbox (registrado em DLQ).",
       });
     }
-
-    const reason = "dispatch_transport_not_implemented";
 
     await admin.from("alert_dispatch_log").insert({
       event_code: eventCode,
@@ -139,24 +141,15 @@ export async function POST(req: Request) {
       fingerprint,
       channel: route.channel,
       target: route.target,
-      status: "failed",
-      error: reason,
-    });
-
-    await upsertDlqOnFailure(admin, {
-      route,
-      eventCode,
-      severity,
-      fingerprint,
-      reason,
+      status: "skipped_dedupe",
+      error: "queued_outbox",
     });
 
     return NextResponse.json({
       ok: true,
       route_id: route.id,
-      simulated: false,
-      dispatch_status: "failed",
-      message: "Teste executado: falha registrada em DLQ (transporte não implementado).",
+      dispatch_status: "queued",
+      message: "Teste enfileirado no outbox. O dispatcher enviará em seguida.",
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
