@@ -23,6 +23,28 @@ function compensationMode() {
   return String(process.env.PAYMENTS_COMPENSATION_MODE || "simulate").trim().toLowerCase();
 }
 
+async function postJson(url: string, token: string, payload: Record<string, unknown>) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+      "x-idempotency-key": String(payload.idempotency_key || ""),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = { raw: text };
+  }
+
+  return { ok: res.ok, status: res.status, json };
+}
+
 async function requestRefund(payment: { id: string; gateway_pagamento: string | null; external_id: string | null }) {
   const mode = compensationMode();
 
@@ -34,11 +56,77 @@ async function requestRefund(payment: { id: string; gateway_pagamento: string | 
     };
   }
 
-  // Fase 2 inicial: integração real ainda não conectada por provider.
+  if (!payment.external_id) {
+    return {
+      ok: false,
+      code: "missing_external_id",
+      message: "payment external_id is required for provider refund",
+    };
+  }
+
+  const gw = String(payment.gateway_pagamento || "").toUpperCase();
+  const idempotency_key = `refund:${payment.id}:undelivered_v1`;
+
+  if (gw === "STONE") {
+    const url = process.env.STONE_REFUND_URL || "";
+    const token = process.env.STONE_API_KEY || "";
+    if (!url || !token) {
+      return { ok: false, code: "stone_not_configured", message: "STONE_REFUND_URL/STONE_API_KEY missing" };
+    }
+
+    const call = await postJson(url, token, {
+      payment_ref: payment.external_id,
+      idempotency_key,
+      reason: "undelivered_cycle",
+    });
+
+    if (!call.ok) {
+      return {
+        ok: false,
+        code: "stone_refund_failed",
+        message: `stone refund failed (${call.status})`,
+      };
+    }
+
+    return {
+      ok: true,
+      provider_refund_id: String(call.json?.refund_id || call.json?.id || `stone_refund_${payment.id}`),
+      simulated: false,
+    };
+  }
+
+  if (gw === "ASAAS") {
+    const url = process.env.ASAAS_REFUND_URL || "";
+    const token = process.env.ASAAS_API_KEY || "";
+    if (!url || !token) {
+      return { ok: false, code: "asaas_not_configured", message: "ASAAS_REFUND_URL/ASAAS_API_KEY missing" };
+    }
+
+    const call = await postJson(url, token, {
+      payment_ref: payment.external_id,
+      idempotency_key,
+      reason: "undelivered_cycle",
+    });
+
+    if (!call.ok) {
+      return {
+        ok: false,
+        code: "asaas_refund_failed",
+        message: `asaas refund failed (${call.status})`,
+      };
+    }
+
+    return {
+      ok: true,
+      provider_refund_id: String(call.json?.refund_id || call.json?.id || `asaas_refund_${payment.id}`),
+      simulated: false,
+    };
+  }
+
   return {
     ok: false,
-    code: "refund_not_configured",
-    message: `refund provider adapter not configured for mode=${mode}`,
+    code: "gateway_not_supported",
+    message: `gateway ${gw || "unknown"} not supported for refund`,
   };
 }
 
