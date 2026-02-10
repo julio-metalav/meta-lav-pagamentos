@@ -19,6 +19,29 @@ function isAuthorized(req: Request) {
 const DELIVERED_CYCLE_STATUSES = ["LIBERADO", "EM_USO", "FINALIZADO"];
 const SAFE_PENDING_STATUSES = ["AGUARDANDO_LIBERACAO", "ABORTADO"];
 
+function compensationMode() {
+  return String(process.env.PAYMENTS_COMPENSATION_MODE || "simulate").trim().toLowerCase();
+}
+
+async function requestRefund(payment: { id: string; gateway_pagamento: string | null; external_id: string | null }) {
+  const mode = compensationMode();
+
+  if (mode === "simulate") {
+    return {
+      ok: true,
+      provider_refund_id: `sim_refund_${payment.id}`,
+      simulated: true,
+    };
+  }
+
+  // Fase 2 inicial: integração real ainda não conectada por provider.
+  return {
+    ok: false,
+    code: "refund_not_configured",
+    message: `refund provider adapter not configured for mode=${mode}`,
+  };
+}
+
 export async function scanUndeliveredPaid(req: Request): Promise<ScanResult> {
   try {
     if (!isAuthorized(req)) return bad("Não autorizado", 401);
@@ -118,5 +141,83 @@ export async function scanUndeliveredPaid(req: Request): Promise<ScanResult> {
     };
   } catch (e: any) {
     return bad("Erro interno no scan de compensação.", 500, { details: e?.message || String(e) });
+  }
+}
+
+export async function executeExpiredCompensation(req: Request): Promise<ScanResult> {
+  try {
+    if (!isAuthorized(req)) return bad("Não autorizado", 401);
+
+    const body = await req.json().catch(() => ({}));
+    const limit = Math.min(100, Math.max(1, Number(body?.limit || 50)));
+
+    const admin = supabaseAdmin() as any;
+
+    const { data: candidates, error: candErr } = await admin
+      .from("pagamentos")
+      .select("id,status,gateway_pagamento,external_id,paid_at,created_at")
+      .eq("status", "EXPIRADO")
+      .order("paid_at", { ascending: true })
+      .limit(limit);
+
+    if (candErr) return bad("Erro ao buscar pagamentos expirados.", 500, { details: candErr.message });
+
+    const rows = (candidates || []) as Array<{
+      id: string;
+      status: string;
+      gateway_pagamento: string | null;
+      external_id: string | null;
+      paid_at: string | null;
+      created_at: string;
+    }>;
+
+    const refunded: string[] = [];
+    const skipped: Array<{ payment_id: string; reason: string }> = [];
+    const errors: Array<{ payment_id: string; error: string }> = [];
+
+    for (const p of rows) {
+      const refund = await requestRefund({
+        id: p.id,
+        gateway_pagamento: p.gateway_pagamento,
+        external_id: p.external_id,
+      });
+
+      if (!refund.ok) {
+        skipped.push({ payment_id: p.id, reason: String((refund as any).code || "refund_failed") });
+        continue;
+      }
+
+      const { data: updated, error: uErr } = await admin
+        .from("pagamentos")
+        .update({ status: "ESTORNADO" })
+        .eq("id", p.id)
+        .eq("status", "EXPIRADO")
+        .select("id,status")
+        .maybeSingle();
+
+      if (uErr) {
+        errors.push({ payment_id: p.id, error: uErr.message });
+        continue;
+      }
+
+      if (updated?.id) refunded.push(updated.id);
+    }
+
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        mode: `phase2-executor:${compensationMode()}`,
+        scanned: rows.length,
+        refunded_count: refunded.length,
+        refunded,
+        skipped_count: skipped.length,
+        skipped,
+        error_count: errors.length,
+        errors,
+      },
+    };
+  } catch (e: any) {
+    return bad("Erro interno no executor de compensação.", 500, { details: e?.message || String(e) });
   }
 }
