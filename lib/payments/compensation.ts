@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type ScanResult = {
@@ -22,6 +23,156 @@ const PENDING_TTL_SEC = Number(process.env.PAYMENTS_PENDING_TTL_SEC || 300);
 
 function compensationMode() {
   return String(process.env.PAYMENTS_COMPENSATION_MODE || "simulate").trim().toLowerCase();
+}
+
+function toSeverity(level: "warn" | "critical"): "warning" | "critical" {
+  return level === "critical" ? "critical" : "warning";
+}
+
+function makeAlertFingerprint(input: { code: string; level: "warn" | "critical"; snapshot: any }) {
+  const payload = {
+    code: input.code,
+    level: input.level,
+    expirado: Number(input.snapshot?.payments?.expirado || 0),
+    pago: Number(input.snapshot?.payments?.pago || 0),
+    estornado: Number(input.snapshot?.payments?.estornado || 0),
+    stale: Number(input.snapshot?.cycles?.stale_aguardando_liberacao || 0),
+    mode: String(input.snapshot?.mode || ""),
+  };
+
+  return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+async function resolveDlqOnSuccess(admin: any, route: any, fingerprint: string) {
+  await admin
+    .from("alert_dlq")
+    .update({
+      status: "resolved",
+      resolved_at: new Date().toISOString(),
+      resolved_by: "monitor_dispatch",
+      notes: `[${new Date().toISOString()}] resolved after successful dispatch`,
+    })
+    .eq("channel", route.channel)
+    .eq("target", route.target)
+    .eq("fingerprint", fingerprint)
+    .in("status", ["pending", "retrying", "dead"]);
+}
+
+async function upsertDlqOnFailure(admin: any, params: {
+  route: any;
+  alert: { code: string; level: "warn" | "critical"; message: string };
+  fingerprint: string;
+  snapshot: any;
+  reason: string;
+}) {
+  const { route, alert, fingerprint, snapshot, reason } = params;
+
+  const { data: existing } = await admin
+    .from("alert_dlq")
+    .select("id,attempts,status")
+    .eq("channel", route.channel)
+    .eq("target", route.target)
+    .eq("fingerprint", fingerprint)
+    .in("status", ["pending", "retrying"])
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id) {
+    await admin
+      .from("alert_dlq")
+      .update({
+        attempts: Number(existing.attempts || 0) + 1,
+        status: "retrying",
+        error: reason,
+        last_failed_at: new Date().toISOString(),
+        next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      })
+      .eq("id", existing.id);
+    return;
+  }
+
+  await admin.from("alert_dlq").insert({
+    event_code: alert.code,
+    severity: toSeverity(alert.level),
+    channel: route.channel,
+    target: route.target,
+    payload: {
+      alert,
+      snapshot,
+      route: {
+        id: route.id,
+        event_code: route.event_code,
+      },
+    },
+    fingerprint,
+    error: reason,
+    attempts: 1,
+    status: "pending",
+    first_failed_at: new Date().toISOString(),
+    last_failed_at: new Date().toISOString(),
+    next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+  });
+}
+
+async function dispatchAlertsForRoutes(params: {
+  alerts: Array<{ level: "warn" | "critical"; code: string; message: string }>;
+  snapshot: any;
+}) {
+  const { alerts, snapshot } = params;
+  if (!alerts.length) return { attempted: 0, sent: 0, failed: 0 };
+
+  const admin = supabaseAdmin() as any;
+  const { data: routes } = await admin
+    .from("alert_routes")
+    .select("id,enabled,event_code,channel,target")
+    .eq("enabled", true);
+
+  const activeRoutes = (routes || []) as Array<any>;
+  if (!activeRoutes.length) return { attempted: 0, sent: 0, failed: 0 };
+
+  const simulateSuccess = String(process.env.PAYMENTS_ALERT_DISPATCH_SIMULATE || "true").toLowerCase() !== "false";
+
+  let attempted = 0;
+  let sent = 0;
+  let failed = 0;
+
+  for (const alert of alerts) {
+    for (const route of activeRoutes) {
+      if (!(route.event_code === "all" || route.event_code === alert.code)) continue;
+      attempted += 1;
+
+      const fingerprint = makeAlertFingerprint({ code: alert.code, level: alert.level, snapshot });
+
+      if (simulateSuccess) {
+        sent += 1;
+        await admin.from("alert_dispatch_log").insert({
+          event_code: alert.code,
+          severity: toSeverity(alert.level),
+          fingerprint,
+          channel: route.channel,
+          target: route.target,
+          status: "sent",
+          error: null,
+        });
+        await resolveDlqOnSuccess(admin, route, fingerprint);
+      } else {
+        failed += 1;
+        const reason = "dispatch_transport_not_implemented";
+        await admin.from("alert_dispatch_log").insert({
+          event_code: alert.code,
+          severity: toSeverity(alert.level),
+          fingerprint,
+          channel: route.channel,
+          target: route.target,
+          status: "failed",
+          error: reason,
+        });
+        await upsertDlqOnFailure(admin, { route, alert, fingerprint, snapshot, reason });
+      }
+    }
+  }
+
+  return { attempted, sent, failed };
 }
 
 async function postJson(url: string, token: string, payload: Record<string, unknown>) {
@@ -379,12 +530,15 @@ export async function compensationAlert(req: Request): Promise<ScanResult> {
     alerts.push({ level: "warn", code: "expired_backlog_high", message: `Backlog de EXPIRADO alto (${expired})` });
   }
 
+  const dispatch = await dispatchAlertsForRoutes({ alerts, snapshot: body });
+
   return {
     status: 200,
     body: {
       ok: true,
       has_alert: alerts.length > 0,
       alerts,
+      dispatch,
       snapshot: body,
     },
   };
