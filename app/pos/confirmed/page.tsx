@@ -3,6 +3,21 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+function formatLocalIsoWithOffset(d = new Date()) {
+  const pad = (n: number) => String(Math.trunc(Math.abs(n))).padStart(2, "0");
+  const y = d.getFullYear();
+  const m = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  const ss = pad(d.getSeconds());
+  const offMin = -d.getTimezoneOffset();
+  const sign = offMin >= 0 ? "+" : "-";
+  const offH = pad(Math.floor(Math.abs(offMin) / 60));
+  const offM = pad(Math.abs(offMin) % 60);
+  return `${y}-${m}-${day}T${hh}:${mm}:${ss}${sign}${offH}:${offM}`;
+}
+
 function PosConfirmedContent() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -30,7 +45,7 @@ function PosConfirmedContent() {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "x-pos-local-time": new Date().toISOString(),
+            "x-pos-local-time": formatLocalIsoWithOffset(),
             "x-pos-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Cuiaba",
           },
           body: JSON.stringify({
