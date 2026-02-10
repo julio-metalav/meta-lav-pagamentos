@@ -40,18 +40,6 @@ export async function POST(req: Request) {
     if (!machine || !machine.ativa) return jsonErrorCompat("machine not found", 404, { code: "machine_not_found" });
     if (!machine.gateway_id) return jsonErrorCompat("missing gateway", 409, { code: "missing_gateway_id" });
 
-    // Idempotência por idempotency_key no próprio payload do comando
-    const { data: existingCmd, error: exCmdErr } = await sb
-      .from("iot_commands")
-      .select("id,cmd_id,payload")
-      .eq("gateway_id", machine.gateway_id)
-      .contains("payload", { execute_idempotency_key: input.idempotency_key, payment_id: input.payment_id })
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (exCmdErr) return jsonErrorCompat("Erro ao verificar idempotência de comando.", 500, { code: "db_error", extra: { details: exCmdErr.message } });
-
     const { data: existingCycle, error: exCycleErr } = await sb
       .from("ciclos")
       .select("id,status")
@@ -62,16 +50,6 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (exCycleErr) return jsonErrorCompat("Erro ao verificar ciclo existente.", 500, { code: "db_error", extra: { details: exCycleErr.message } });
-
-    if (existingCmd && existingCycle) {
-      return NextResponse.json({
-        ok: true,
-        cycle_id: existingCycle.id,
-        command_id: existingCmd.cmd_id,
-        status: "queued",
-        replay: true,
-      });
-    }
 
     // Cria ciclo, se não houver
     let cycleId = existingCycle?.id ?? null;
@@ -91,6 +69,34 @@ export async function POST(req: Request) {
         return jsonErrorCompat("Erro ao criar ciclo.", 500, { code: "cycle_create_failed", extra: { details: cErr?.message } });
       }
       cycleId = newCycle.id;
+    }
+
+    // Idempotência final: com ciclo resolvido, reaproveita comando já criado para key+ciclo.
+    const { data: existingCmdByCycle, error: exCmdCycleErr } = await sb
+      .from("iot_commands")
+      .select("id,cmd_id,payload,created_at")
+      .eq("gateway_id", machine.gateway_id)
+      .filter("payload->>execute_idempotency_key", "eq", input.idempotency_key)
+      .filter("payload->>ciclo_id", "eq", String(cycleId))
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (exCmdCycleErr) {
+      return jsonErrorCompat("Erro ao verificar idempotência de comando.", 500, {
+        code: "db_error",
+        extra: { details: exCmdCycleErr.message },
+      });
+    }
+
+    if (existingCmdByCycle) {
+      return NextResponse.json({
+        ok: true,
+        cycle_id: cycleId,
+        command_id: existingCmdByCycle.cmd_id,
+        status: "queued",
+        replay: true,
+      });
     }
 
     const cmd_id = crypto.randomUUID();

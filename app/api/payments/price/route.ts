@@ -49,10 +49,14 @@ export async function POST(req: Request) {
     if (mErr) return jsonErrorCompat("Erro ao consultar máquina.", 500, { code: "db_error", extra: { details: mErr.message } });
     if (!machine || !machine.ativa) return jsonErrorCompat("machine not found", 404, { code: "machine_not_found" });
 
+    const nowIso = new Date().toISOString();
+
     const { data: rows, error: pErr } = await sb
       .from("precos_ciclo")
       .select("*")
-      .eq("condominio_id", input.condominio_id)
+      .eq("maquina_id", machine.id)
+      .or(`vigente_ate.is.null,vigente_ate.gte.${nowIso}`)
+      .lte("vigente_desde", nowIso)
       .limit(100);
 
     if (pErr) return jsonErrorCompat("Erro ao consultar precos_ciclo.", 500, { code: "db_error", extra: { details: pErr.message } });
