@@ -10,6 +10,7 @@ export default function PosReleasingPage() {
   const pos_serial = sp.get("pos_serial") || "";
   const machine_id = sp.get("machine_id") || "";
   const payment_id = sp.get("payment_id") || "";
+  const provider_ref = sp.get("provider_ref") || "";
   const execute_key = sp.get("execute_key") || crypto.randomUUID();
 
   const [message, setMessage] = useState("Enviando comando para a máquina...");
@@ -57,9 +58,11 @@ export default function PosReleasingPage() {
           router.replace(
             `/pos/released?condominio_id=${encodeURIComponent(condominio_id)}&pos_serial=${encodeURIComponent(pos_serial)}&payment_id=${encodeURIComponent(
               payment_id
-            )}&machine_id=${encodeURIComponent(machine_id)}&command_id=${encodeURIComponent(String(data.command_id || ""))}&method=${encodeURIComponent(
-              method
-            )}&identificador_local=${encodeURIComponent(identificador_local)}&tipo=${encodeURIComponent(tipo)}&amount=${encodeURIComponent(amount)}`
+            )}&machine_id=${encodeURIComponent(machine_id)}&command_id=${encodeURIComponent(String(data.command_id || ""))}&cycle_id=${encodeURIComponent(
+              String(data.cycle_id || "")
+            )}&provider_ref=${encodeURIComponent(provider_ref)}&method=${encodeURIComponent(method)}&identificador_local=${encodeURIComponent(
+              identificador_local
+            )}&tipo=${encodeURIComponent(tipo)}&amount=${encodeURIComponent(amount)}`
           );
         }
       } catch (e: any) {
@@ -79,7 +82,7 @@ export default function PosReleasingPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, condominio_id, pos_serial, machine_id, payment_id, execute_key]);
+  }, [router, condominio_id, pos_serial, machine_id, payment_id, provider_ref, execute_key]);
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 flex items-center justify-center">

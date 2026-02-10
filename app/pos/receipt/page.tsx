@@ -12,14 +12,14 @@ export default function PosReceiptPage() {
   const payment_id = sp.get("payment_id") || "";
   const machine_id = sp.get("machine_id") || "";
   const command_id = sp.get("command_id") || "";
+  const cycle_id = sp.get("cycle_id") || "";
+  const provider_ref = sp.get("provider_ref") || "";
   const method = sp.get("method") || "PIX";
   const identificador_local = sp.get("identificador_local") || "";
   const tipo = sp.get("tipo") || "lavadora";
   const amount = Number(sp.get("amount") || 0);
 
   const dateStr = useMemo(() => new Date().toLocaleString("pt-BR"), []);
-  const providerRef = useMemo(() => `prov_${payment_id.slice(0, 8) || "N/A"}`, [payment_id]);
-  const cycleId = useMemo(() => command_id ? `cycle_from_cmd_${command_id.slice(0, 8)}` : "N/A", [command_id]);
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 flex items-center justify-center">
@@ -32,8 +32,8 @@ export default function PosReceiptPage() {
           <p><strong>Data/Hora:</strong> {dateStr}</p>
           <p><strong>Máquina:</strong> {tipo === "lavadora" ? "Lavadora" : "Secadora"} {identificador_local}</p>
           <p><strong>Payment ID:</strong> {payment_id || "N/A"}</p>
-          <p><strong>Provider ref:</strong> {providerRef}</p>
-          <p><strong>Cycle ID:</strong> {cycleId}</p>
+          <p><strong>Provider ref:</strong> {provider_ref || "N/A"}</p>
+          <p><strong>Cycle ID:</strong> {cycle_id || "N/A"}</p>
           <p><strong>Command ID:</strong> {command_id || "N/A"}</p>
           <p><strong>Machine ID:</strong> {machine_id || "N/A"}</p>
         </div>

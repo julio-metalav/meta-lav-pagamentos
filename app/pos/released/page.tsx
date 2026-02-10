@@ -10,6 +10,8 @@ export default function PosReleasedPage() {
   const pos_serial = sp.get("pos_serial") || "";
   const payment_id = sp.get("payment_id") || "";
   const command_id = sp.get("command_id") || "";
+  const cycle_id = sp.get("cycle_id") || "";
+  const provider_ref = sp.get("provider_ref") || "";
   const machine_id = sp.get("machine_id") || "";
   const method = sp.get("method") || "PIX";
   const identificador_local = sp.get("identificador_local") || "";
@@ -37,9 +39,11 @@ export default function PosReleasedPage() {
               router.push(
                 `/pos/receipt?condominio_id=${encodeURIComponent(condominio_id)}&pos_serial=${encodeURIComponent(pos_serial)}&payment_id=${encodeURIComponent(
                   payment_id
-                )}&machine_id=${encodeURIComponent(machine_id)}&command_id=${encodeURIComponent(command_id)}&method=${encodeURIComponent(
-                  method
-                )}&identificador_local=${encodeURIComponent(identificador_local)}&tipo=${encodeURIComponent(tipo)}&amount=${encodeURIComponent(amount)}`
+                )}&machine_id=${encodeURIComponent(machine_id)}&command_id=${encodeURIComponent(command_id)}&cycle_id=${encodeURIComponent(
+                  cycle_id
+                )}&provider_ref=${encodeURIComponent(provider_ref)}&method=${encodeURIComponent(method)}&identificador_local=${encodeURIComponent(
+                  identificador_local
+                )}&tipo=${encodeURIComponent(tipo)}&amount=${encodeURIComponent(amount)}`
               )
             }
           >

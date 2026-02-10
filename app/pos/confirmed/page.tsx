@@ -52,6 +52,8 @@ export default function PosConfirmedPage() {
         if (!paymentId) throw new Error("payment_id ausente no authorize");
 
         setStatus("Confirmando pagamento...");
+        const providerRef = `stone_pos_${crypto.randomUUID()}`;
+
         const confirm = await fetch("/api/payments/confirm", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -60,7 +62,7 @@ export default function PosConfirmedPage() {
             origin: { pos_device_id: null, user_id: null },
             payment_id: paymentId,
             provider: "stone",
-            provider_ref: `stone_pos_${crypto.randomUUID()}`,
+            provider_ref: providerRef,
             result: "approved",
           }),
         });
@@ -76,7 +78,9 @@ export default function PosConfirmedPage() {
               machine_id
             )}&identificador_local=${encodeURIComponent(identificador_local)}&tipo=${encodeURIComponent(tipo)}&amount=${encodeURIComponent(
               String(amount)
-            )}&method=${encodeURIComponent(method)}&payment_id=${encodeURIComponent(paymentId)}&execute_key=${encodeURIComponent(executeKey)}`
+            )}&method=${encodeURIComponent(method)}&payment_id=${encodeURIComponent(paymentId)}&provider_ref=${encodeURIComponent(
+              providerRef
+            )}&execute_key=${encodeURIComponent(executeKey)}`
           );
         }
       } catch (e: any) {
