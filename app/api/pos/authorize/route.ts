@@ -1,41 +1,35 @@
 // app/api/pos/authorize/route.ts
-import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { parseAuthorizeInput } from "@/lib/payments/contracts";
 
 /**
- * Meta-Lav Pagamentos — POS Authorize (piloto Fase A)
+ * Meta-Lav Pagamentos — POS Authorize
  *
- * Objetivo deste passo:
- * - Introduzir DTO/validação centralizada (contracts)
- * - Introduzir erro canônico compatível (error_v1 sem quebrar legado)
- *
- * Sem mudança funcional no fluxo atual.
+ * Regra financeira/operacional:
+ * - authorize: apenas autoriza/cria pagamento
+ * - confirm: confirma pagamento
+ * - execute-cycle: cria ciclo + comando IoT (liberação física)
  */
 export async function POST(req: Request) {
   try {
     const supabase = supabaseAdmin() as any;
 
-    let body: any = {};
+    let body: unknown = {};
     try {
       body = await req.json();
     } catch {
       body = {};
     }
 
-    const parsed = parseAuthorizeInput(req, body);
+    const parsed = parseAuthorizeInput(req, body as Record<string, unknown>);
     if (!parsed.ok) {
       return jsonErrorCompat(parsed.message, 400, { code: parsed.code });
     }
 
     const input = parsed.data;
-    const { pos_serial, identificador_local, valor_centavos, metodo, metadata, quote } = input;
-
-    const posLocalTime = req.headers.get("x-pos-local-time") || req.headers.get("x-device-local-time") || null;
-    const posTimezone = req.headers.get("x-pos-timezone") || req.headers.get("x-device-timezone") || null;
-    const serverReceivedAt = new Date().toISOString();
+    const { pos_serial, identificador_local, valor_centavos, metodo, quote } = input;
 
     if (quote) {
       const validUntilMs = Date.parse(quote.valid_until);
@@ -62,7 +56,7 @@ export async function POST(req: Request) {
 
     const condominio_id = posDevice.condominio_id;
 
-    // 2) Máquina vinculada ao POS (Regra B)
+    // 2) Máquina vinculada ao POS
     const { data: maquina, error: maqErr } = await supabase
       .from("condominio_maquinas")
       .select("id, condominio_id, gateway_id, tipo, identificador_local, ativa, pos_device_id")
@@ -108,7 +102,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // 4) Pagamento (PT-BR)
+    // 4) Pagamento (PT-BR) — sem ciclo/comando nesta etapa
     const { data: pagamento, error: payErr } = await supabase
       .from("pagamentos")
       .insert({
@@ -126,85 +120,17 @@ export async function POST(req: Request) {
 
     if (payErr) return jsonErrorCompat("Erro ao criar pagamento.", 500, { code: "db_error", extra: { details: payErr.message } });
 
-    // 5) Ciclo (PT-BR)
-    const { data: ciclo, error: cicloErr } = await supabase
-      .from("ciclos")
-      .insert({
-        pagamento_id: pagamento.id,
-        condominio_id,
-        maquina_id: maquina.id,
-      })
-      .select("id, status, created_at")
-      .single();
-
-    if (cicloErr) {
-      return jsonErrorCompat("Pagamento criado, mas falhou ao criar ciclo.", 500, {
-        code: "cycle_create_failed",
-        extra: {
-          pagamento_id: pagamento.id,
-          details: cicloErr.message,
-        },
-      });
-    }
-
-    // 6) Comando IoT (PT-BR)
-    const cmd_id = crypto.randomUUID();
-    const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-
-    const { data: iotCmd, error: cmdErr } = await supabase
-      .from("iot_commands")
-      .insert({
-        gateway_id: maquina.gateway_id,
-        condominio_maquinas_id: maquina.id,
-        cmd_id,
-        tipo: "PULSE",
-        payload: {
-          pulses: 1,
-          ciclo_id: ciclo.id,
-          pagamento_id: pagamento.id,
-          identificador_local: maquina.identificador_local,
-          tipo_maquina: maquina.tipo,
-          metadata,
-          quote,
-          channel: input.channel,
-          origin: input.origin,
-          pos_clock: {
-            local_time: posLocalTime,
-            timezone: posTimezone,
-            server_received_at: serverReceivedAt,
-          },
-        },
-        status: "PENDENTE",
-        expires_at,
-      })
-      .select("id, status, created_at")
-      .single();
-
-    if (cmdErr) {
-      return jsonErrorCompat("Pagamento+ciclo criados, mas falhou ao criar iot_command.", 500, {
-        code: "iot_command_create_failed",
-        extra: {
-          pagamento_id: pagamento.id,
-          ciclo_id: ciclo.id,
-          details: cmdErr.message,
-        },
-      });
-    }
-
     return NextResponse.json({
       ok: true,
       reused: false,
       pagamento_id: pagamento.id,
-      ciclo_id: ciclo.id,
-      iot_command_row_id: iotCmd.id,
-      cmd_id,
-      gateway_id: maquina.gateway_id,
-      expires_at,
+      pagamento_status: pagamento.status,
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
     return jsonErrorCompat("Erro inesperado no authorize.", 500, {
       code: "internal_error",
-      extra: { details: e?.message ?? String(e) },
+      extra: { details: msg },
     });
   }
 }
