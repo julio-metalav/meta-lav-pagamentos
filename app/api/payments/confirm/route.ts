@@ -93,10 +93,11 @@ export async function POST(req: Request) {
       payment_id: updated.id,
       status: String(updated.status || "").toLowerCase() === "pago" ? "confirmed" : "failed",
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
     return jsonErrorCompat("Erro inesperado no confirm.", 500, {
       code: "internal_error",
-      extra: { details: e?.message ?? String(e) },
+      extra: { details: msg },
     });
   }
 }

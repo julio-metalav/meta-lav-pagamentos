@@ -117,10 +117,10 @@ export async function POST(req: Request) {
     if (existingCmdByCycle) {
       return NextResponse.json({
         ok: true,
+        replay: true,
         cycle_id: cycleId,
         command_id: existingCmdByCycle.cmd_id,
         status: "queued",
-        replay: true,
       });
     }
 
@@ -159,10 +159,11 @@ export async function POST(req: Request) {
       command_id: cmd_id,
       status: "queued",
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
     return jsonErrorCompat("Erro inesperado no execute-cycle.", 500, {
       code: "internal_error",
-      extra: { details: e?.message ?? String(e) },
+      extra: { details: msg },
     });
   }
 }
