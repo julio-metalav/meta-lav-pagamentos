@@ -31,8 +31,30 @@ export default function PosSummaryPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-2">
-          <button className="rounded-lg bg-[var(--brand-primary)] text-white py-3 font-bold">Pagar com Pix</button>
-          <button className="rounded-lg border border-[var(--border)] py-3 font-bold">Pagar com Cartão</button>
+          <button
+            className="rounded-lg bg-[var(--brand-primary)] text-white py-3 font-bold"
+            onClick={() =>
+              router.push(
+                `/pos/pix?condominio_id=${encodeURIComponent(condominio_id)}&pos_serial=${encodeURIComponent(pos_serial)}&machine_id=${encodeURIComponent(
+                  machine_id
+                )}&identificador_local=${encodeURIComponent(identificador_local)}&tipo=${encodeURIComponent(tipo)}&amount=${encodeURIComponent(String(amount))}`
+              )
+            }
+          >
+            Pagar com Pix
+          </button>
+          <button
+            className="rounded-lg border border-[var(--border)] py-3 font-bold"
+            onClick={() =>
+              router.push(
+                `/pos/confirmed?method=CARTAO&condominio_id=${encodeURIComponent(condominio_id)}&pos_serial=${encodeURIComponent(pos_serial)}&machine_id=${encodeURIComponent(
+                  machine_id
+                )}&identificador_local=${encodeURIComponent(identificador_local)}&tipo=${encodeURIComponent(tipo)}&amount=${encodeURIComponent(String(amount))}`
+              )
+            }
+          >
+            Pagar com Cartão
+          </button>
           <button
             className="rounded-lg text-sm py-2 text-[var(--text-secondary)]"
             onClick={() =>
