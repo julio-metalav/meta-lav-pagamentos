@@ -51,7 +51,7 @@ function assert2xx(step, r) {
     origin: { pos_device_id: null, user_id: null },
     condominio_id: CONDOMINIO_ID,
     condominio_maquinas_id: CONDOMINIO_MAQUINAS_ID,
-    service_type: "lavadora",
+    service_type: process.env.SERVICE_TYPE || "lavadora",
   };
 
   const availability = await post("/api/payments/availability", common);
