@@ -18,6 +18,7 @@ function isAuthorized(req: Request) {
 
 const DELIVERED_CYCLE_STATUSES = ["LIBERADO", "EM_USO", "FINALIZADO"];
 const SAFE_PENDING_STATUSES = ["AGUARDANDO_LIBERACAO", "ABORTADO"];
+const PENDING_TTL_SEC = Number(process.env.PAYMENTS_PENDING_TTL_SEC || 300);
 
 function compensationMode() {
   return String(process.env.PAYMENTS_COMPENSATION_MODE || "simulate").trim().toLowerCase();
@@ -308,4 +309,83 @@ export async function executeExpiredCompensation(req: Request): Promise<ScanResu
   } catch (e: any) {
     return bad("Erro interno no executor de compensação.", 500, { details: e?.message || String(e) });
   }
+}
+
+export async function compensationStatus(req: Request): Promise<ScanResult> {
+  try {
+    if (!isAuthorized(req)) return bad("Não autorizado", 401);
+
+    const admin = supabaseAdmin() as any;
+    const nowIso = new Date().toISOString();
+    const staleCutoffIso = new Date(Date.now() - PENDING_TTL_SEC * 1000).toISOString();
+
+    const [{ count: expiredCount }, { count: paidCount }, { count: refundedCount }, { count: stalePendingCount }] = await Promise.all([
+      admin.from("pagamentos").select("id", { count: "exact", head: true }).eq("status", "EXPIRADO"),
+      admin.from("pagamentos").select("id", { count: "exact", head: true }).eq("status", "PAGO"),
+      admin.from("pagamentos").select("id", { count: "exact", head: true }).eq("status", "ESTORNADO"),
+      admin
+        .from("ciclos")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "AGUARDANDO_LIBERACAO")
+        .lte("created_at", staleCutoffIso),
+    ]);
+
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        mode: compensationMode(),
+        now: nowIso,
+        pending_ttl_sec: PENDING_TTL_SEC,
+        payments: {
+          pago: paidCount || 0,
+          expirado: expiredCount || 0,
+          estornado: refundedCount || 0,
+        },
+        cycles: {
+          stale_aguardando_liberacao: stalePendingCount || 0,
+        },
+        providers: {
+          stone_configured: !!(process.env.STONE_REFUND_URL && process.env.STONE_API_KEY),
+          asaas_configured: !!(process.env.ASAAS_REFUND_URL && process.env.ASAAS_API_KEY),
+        },
+      },
+    };
+  } catch (e: any) {
+    return bad("Erro interno no status de compensação.", 500, { details: e?.message || String(e) });
+  }
+}
+
+export async function compensationAlert(req: Request): Promise<ScanResult> {
+  const s = await compensationStatus(req);
+  if (s.status !== 200) return s;
+
+  const body = s.body as any;
+  const expired = Number(body?.payments?.expirado || 0);
+  const stale = Number(body?.cycles?.stale_aguardando_liberacao || 0);
+  const mode = String(body?.mode || "simulate");
+  const stoneOk = !!body?.providers?.stone_configured;
+  const asaasOk = !!body?.providers?.asaas_configured;
+
+  const alerts: Array<{ level: "warn" | "critical"; code: string; message: string }> = [];
+
+  if (stale > 0) {
+    alerts.push({ level: "warn", code: "stale_pending_cycles", message: `${stale} ciclos pendentes stale` });
+  }
+  if (expired > 0 && mode === "real" && !stoneOk && !asaasOk) {
+    alerts.push({ level: "critical", code: "refund_provider_not_configured", message: "Há EXPIRADO sem provider de estorno configurado" });
+  }
+  if (expired >= 20) {
+    alerts.push({ level: "warn", code: "expired_backlog_high", message: `Backlog de EXPIRADO alto (${expired})` });
+  }
+
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      has_alert: alerts.length > 0,
+      alerts,
+      snapshot: body,
+    },
+  };
 }

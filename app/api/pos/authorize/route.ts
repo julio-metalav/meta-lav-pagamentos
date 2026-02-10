@@ -33,6 +33,10 @@ export async function POST(req: Request) {
     const input = parsed.data;
     const { pos_serial, identificador_local, valor_centavos, metodo, metadata, quote } = input;
 
+    const posLocalTime = req.headers.get("x-pos-local-time") || req.headers.get("x-device-local-time") || null;
+    const posTimezone = req.headers.get("x-pos-timezone") || req.headers.get("x-device-timezone") || null;
+    const serverReceivedAt = new Date().toISOString();
+
     if (quote) {
       const validUntilMs = Date.parse(quote.valid_until);
       if (!Number.isFinite(validUntilMs)) {
@@ -164,6 +168,11 @@ export async function POST(req: Request) {
           quote,
           channel: input.channel,
           origin: input.origin,
+          pos_clock: {
+            local_time: posLocalTime,
+            timezone: posTimezone,
+            server_received_at: serverReceivedAt,
+          },
         },
         status: "PENDENTE",
         expires_at,
