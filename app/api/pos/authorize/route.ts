@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { parseAuthorizeInput } from "@/lib/payments/contracts";
+import { isPosCanaryAllowed } from "@/lib/payments/rollout";
 
 /**
  * Meta-Lav Pagamentos — POS Authorize
@@ -55,6 +56,18 @@ export async function POST(req: Request) {
     if (!posDevice) return jsonErrorCompat("POS não cadastrado (pos_devices).", 401, { code: "pos_not_found" });
 
     const condominio_id = posDevice.condominio_id;
+
+    const rollout = isPosCanaryAllowed(String(condominio_id || ""));
+    if (!rollout.allowed) {
+      return jsonErrorCompat("POS authorize indisponível para este condomínio (canary).", 403, {
+        code: "canary_not_allowed",
+        extra: {
+          condominio_id,
+          canary_mode: rollout.mode,
+          canary_reason: rollout.reason,
+        },
+      });
+    }
 
     // 2) Máquina vinculada ao POS
     const { data: maquina, error: maqErr } = await supabase
