@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function PosReleasingPage() {
+function PosReleasingContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const condominio_id = sp.get("condominio_id") || "";
@@ -65,13 +65,14 @@ export default function PosReleasingPage() {
             )}&tipo=${encodeURIComponent(tipo)}&amount=${encodeURIComponent(amount)}`
           );
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Falha de rede";
         if (!cancelled) {
           router.replace(
             `/pos/releasing-failure?condominio_id=${encodeURIComponent(condominio_id)}&pos_serial=${encodeURIComponent(pos_serial)}&payment_id=${encodeURIComponent(
               payment_id
             )}&machine_id=${encodeURIComponent(machine_id)}&execute_key=${encodeURIComponent(execute_key)}&error_code=network_error&error_message=${encodeURIComponent(
-              e?.message || "Falha de rede"
+              msg
             )}`
           );
         }
@@ -82,7 +83,7 @@ export default function PosReleasingPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, condominio_id, pos_serial, machine_id, payment_id, provider_ref, execute_key]);
+  }, [router, sp, condominio_id, pos_serial, machine_id, payment_id, provider_ref, execute_key]);
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 flex items-center justify-center">
@@ -93,5 +94,22 @@ export default function PosReleasingPage() {
         <p className="text-xs text-[var(--text-muted)]">payment_id={payment_id || "N/A"}</p>
       </div>
     </div>
+  );
+}
+
+export default function PosReleasingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 flex items-center justify-center">
+          <div className="card w-full max-w-md p-6 space-y-4 text-center">
+            <p className="text-4xl">⏳</p>
+            <h1 className="text-xl font-semibold">Processando liberação...</h1>
+          </div>
+        </div>
+      }
+    >
+      <PosReleasingContent />
+    </Suspense>
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function PosFailurePage() {
+function PosFailureContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const condominio_id = sp.get("condominio_id") || "";
@@ -27,9 +28,28 @@ export default function PosFailurePage() {
           >
             Tentar novamente
           </button>
-          <button className="rounded-lg border border-[var(--border)] py-3" onClick={() => alert("Suporte: use POS ID para atendimento")}>Chamar suporte</button>
+          <button className="rounded-lg border border-[var(--border)] py-3" onClick={() => alert("Suporte: use POS ID para atendimento")}>
+            Chamar suporte
+          </button>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PosFailurePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] flex items-center justify-center p-6">
+          <div className="card w-full max-w-md p-6 space-y-4 text-center">
+            <p className="text-4xl">⏳</p>
+            <h1 className="text-xl font-semibold">Carregando...</h1>
+          </div>
+        </div>
+      }
+    >
+      <PosFailureContent />
+    </Suspense>
   );
 }

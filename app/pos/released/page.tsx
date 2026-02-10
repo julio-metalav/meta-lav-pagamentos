@@ -1,8 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function PosReleasedPage() {
+function PosReleasedContent() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -59,5 +60,22 @@ export default function PosReleasedPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PosReleasedPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 flex items-center justify-center">
+          <div className="card w-full max-w-md p-6 space-y-4 text-center">
+            <p className="text-4xl">⏳</p>
+            <h1 className="text-xl font-semibold">Carregando liberação...</h1>
+          </div>
+        </div>
+      }
+    >
+      <PosReleasedContent />
+    </Suspense>
   );
 }

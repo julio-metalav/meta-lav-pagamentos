@@ -1,8 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function PosSummaryPage() {
+function PosSummaryContent() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -43,6 +44,7 @@ export default function PosSummaryPage() {
           >
             Pagar com Pix
           </button>
+
           <button
             className="rounded-lg border border-[var(--border)] py-3 font-bold"
             onClick={() =>
@@ -55,6 +57,7 @@ export default function PosSummaryPage() {
           >
             Pagar com Cartão
           </button>
+
           <button
             className="rounded-lg text-sm py-2 text-[var(--text-secondary)]"
             onClick={() =>
@@ -68,5 +71,22 @@ export default function PosSummaryPage() {
         <p className="text-[10px] text-[var(--text-muted)] break-all">machine_id={machine_id}</p>
       </div>
     </div>
+  );
+}
+
+export default function PosSummaryPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 flex items-center justify-center">
+          <div className="card w-full max-w-md p-6 space-y-3 text-center">
+            <p className="text-4xl">⏳</p>
+            <h1 className="text-xl font-semibold">Carregando resumo...</h1>
+          </div>
+        </div>
+      }
+    >
+      <PosSummaryContent />
+    </Suspense>
   );
 }

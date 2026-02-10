@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function PosConfirmedPage() {
+function PosConfirmedContent() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -83,8 +83,9 @@ export default function PosConfirmedPage() {
             )}&execute_key=${encodeURIComponent(executeKey)}`
           );
         }
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Falha no fluxo de confirmação");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Falha no fluxo de confirmação";
+        if (!cancelled) setError(msg);
       }
     }
 
@@ -122,5 +123,22 @@ export default function PosConfirmedPage() {
         <p className="text-sm text-[var(--text-secondary)]">{status}</p>
       </div>
     </div>
+  );
+}
+
+export default function PosConfirmedPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 flex items-center justify-center">
+          <div className="card w-full max-w-md p-6 space-y-3 text-center">
+            <p className="text-4xl">⏳</p>
+            <h1 className="text-xl font-semibold">Carregando confirmação...</h1>
+          </div>
+        </div>
+      }
+    >
+      <PosConfirmedContent />
+    </Suspense>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type Check = "ok" | "warn";
 
-export default function PosSplashPage() {
+function PosSplashContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const condominio_id = sp.get("condominio_id") || "";
@@ -18,11 +18,15 @@ export default function PosSplashPage() {
   const allOk = useMemo(() => internet === "ok" && backend === "ok" && gateway === "ok", [internet, backend, gateway]);
 
   useEffect(() => {
-    setInternet(navigator.onLine ? "ok" : "warn");
-
     async function run() {
+      setInternet(window.navigator.onLine ? "ok" : "warn");
+
       try {
-        const b = await fetch("/api/payments/compensation/status", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+        const b = await fetch("/api/payments/compensation/status", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        });
         setBackend(b.ok ? "ok" : "warn");
       } catch {
         setBackend("warn");
@@ -54,7 +58,9 @@ export default function PosSplashPage() {
   const statusChip = (label: string, v: Check) => (
     <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
       <span>{label}</span>
-      <span className="pill" style={{ color: v === "ok" ? "#16A34A" : "#F59E0B" }}>{v === "ok" ? "✅" : "⚠️"}</span>
+      <span className="pill" style={{ color: v === "ok" ? "#16A34A" : "#F59E0B" }}>
+        {v === "ok" ? "✅" : "⚠️"}
+      </span>
     </div>
   );
 
@@ -80,5 +86,23 @@ export default function PosSplashPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function PosSplashPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] flex items-center justify-center p-6">
+          <div className="card w-full max-w-md p-6 space-y-4 text-center">
+            <p className="text-4xl">⏳</p>
+            <h1 className="text-2xl font-semibold">Meta-Lav POS</h1>
+            <p className="text-sm text-[var(--text-secondary)]">Carregando...</p>
+          </div>
+        </div>
+      }
+    >
+      <PosSplashContent />
+    </Suspense>
   );
 }

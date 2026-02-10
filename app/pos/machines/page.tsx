@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type Machine = {
@@ -18,7 +18,7 @@ function chipColor(s: MachineState) {
   return "#6B7280";
 }
 
-export default function PosMachinesPage() {
+function PosMachinesContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const condominio_id = sp.get("condominio_id") || "";
@@ -151,5 +151,26 @@ export default function PosMachinesPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function PosMachinesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4">
+          <div className="mx-auto max-w-3xl space-y-3">
+            <h1 className="text-xl font-semibold">Seleção de Máquina</h1>
+            <div className="grid grid-cols-2 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="card h-28 animate-pulse" />
+              ))}
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <PosMachinesContent />
+    </Suspense>
   );
 }

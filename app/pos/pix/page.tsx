@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const TOTAL_SECONDS = 5 * 60;
@@ -13,7 +13,7 @@ function formatTimer(sec: number) {
   return `${m}:${s}`;
 }
 
-export default function PosPixPage() {
+function PosPixContent() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -26,6 +26,7 @@ export default function PosPixPage() {
 
   const [left, setLeft] = useState(TOTAL_SECONDS);
   const [paused, setPaused] = useState(false);
+  const [pixNonce] = useState(() => crypto.randomUUID().slice(0, 8));
 
   useEffect(() => {
     if (paused) return;
@@ -42,7 +43,7 @@ export default function PosPixPage() {
     return () => clearTimeout(t);
   }, [left, paused, router, condominio_id, pos_serial, machine_id, identificador_local, tipo, amount]);
 
-  const fakePixCode = useMemo(() => `000201PIX-METALAV-${machine_id.slice(0, 8)}-${Date.now()}`, [machine_id]);
+  const fakePixCode = useMemo(() => `000201PIX-METALAV-${machine_id.slice(0, 8)}-${pixNonce}`, [machine_id, pixNonce]);
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4">
@@ -100,5 +101,22 @@ export default function PosPixPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PosPixPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 flex items-center justify-center">
+          <div className="card w-full max-w-md p-6 space-y-3 text-center">
+            <p className="text-4xl">⏳</p>
+            <h1 className="text-xl font-semibold">Carregando PIX...</h1>
+          </div>
+        </div>
+      }
+    >
+      <PosPixContent />
+    </Suspense>
   );
 }
