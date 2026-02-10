@@ -7,6 +7,8 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { parseExecuteCycleInput } from "@/lib/payments/contracts";
 
+const PENDING_TTL_SEC = Number(process.env.PAYMENTS_PENDING_TTL_SEC || 300);
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -42,7 +44,7 @@ export async function POST(req: Request) {
 
     const { data: existingCycle, error: exCycleErr } = await sb
       .from("ciclos")
-      .select("id,status")
+      .select("id,status,created_at")
       .eq("pagamento_id", input.payment_id)
       .eq("maquina_id", machine.id)
       .order("created_at", { ascending: false })
@@ -50,6 +52,29 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (exCycleErr) return jsonErrorCompat("Erro ao verificar ciclo existente.", 500, { code: "db_error", extra: { details: exCycleErr.message } });
+
+    // Fail-safe W3: ciclo pendente fora do TTL expira e bloqueia replay/execução tardia.
+    if (existingCycle?.status === "AGUARDANDO_LIBERACAO") {
+      const createdAtMs = existingCycle.created_at ? new Date(existingCycle.created_at).getTime() : Date.now();
+      const expired = Date.now() >= createdAtMs + PENDING_TTL_SEC * 1000;
+
+      if (expired) {
+        const { error: abortErr } = await sb
+          .from("ciclos")
+          .update({ status: "ABORTADO" })
+          .eq("id", existingCycle.id)
+          .eq("status", "AGUARDANDO_LIBERACAO");
+
+        if (abortErr) {
+          return jsonErrorCompat("Erro ao expirar ciclo pendente.", 500, {
+            code: "db_error",
+            extra: { details: abortErr.message },
+          });
+        }
+
+        return jsonErrorCompat("cycle expired", 409, { code: "cycle_expired", retry_after_sec: 0 });
+      }
+    }
 
     // Cria ciclo, se não houver
     let cycleId = existingCycle?.id ?? null;
