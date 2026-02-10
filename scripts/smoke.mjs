@@ -17,6 +17,9 @@ try {
     console.log("[smoke] skip e2e-iot: faltou IOT_HMAC_SECRET__GW_TESTE_001 ou IOT_HMAC_SECRET");
   }
 
+  // e2e-payments depende de env de contexto (POS + condomínio + máquina)
+  run("node scripts/e2e-payments.mjs");
+
   console.log("\n[smoke] OK");
 } catch (e) {
   console.error("\n[smoke] FAIL");

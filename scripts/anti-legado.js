@@ -30,12 +30,13 @@ function walk(dir, out = []) {
 }
 
 function hasBannedRef(content, token) {
+  // Mantém checagem focada em acesso de tabela/query para evitar falso positivo de rota/path.
   const patterns = [
     `.from("${token}")`,
     `.from('${token}')`,
     `.eq("table","${token}")`,
-    `/${token}`,
-    ` ${token} `,
+    `.eq('table','${token}')`,
+    `from ${token}`,
   ];
   return patterns.some((p) => content.includes(p));
 }
