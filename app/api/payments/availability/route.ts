@@ -6,6 +6,8 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { parseAvailabilityInput } from "@/lib/payments/contracts";
 
+const PENDING_TTL_SEC = Number(process.env.PAYMENTS_PENDING_TTL_SEC || 300);
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -48,11 +50,39 @@ export async function POST(req: Request) {
     }
 
     const now = Date.now();
-    const reservedUntil = openCycle.eta_livre_at ? new Date(openCycle.eta_livre_at).toISOString() : null;
-    const isExpired = !!reservedUntil && new Date(reservedUntil).getTime() < now;
+    const createdAtMs = openCycle.created_at ? new Date(openCycle.created_at).getTime() : now;
+    const pendingDeadlineMs = createdAtMs + PENDING_TTL_SEC * 1000;
 
-    if (isExpired && openCycle.status === "AGUARDANDO_LIBERACAO") {
-      return jsonErrorCompat("reservation expired", 410, { code: "expired", retry_after_sec: 0 });
+    const reservedUntil = openCycle.eta_livre_at
+      ? new Date(openCycle.eta_livre_at).toISOString()
+      : openCycle.status === "AGUARDANDO_LIBERACAO"
+      ? new Date(pendingDeadlineMs).toISOString()
+      : null;
+
+    const isPendingStale = openCycle.status === "AGUARDANDO_LIBERACAO" && now >= pendingDeadlineMs;
+
+    if (isPendingStale) {
+      const { error: abortErr } = await sb
+        .from("ciclos")
+        .update({ status: "ABORTADO" })
+        .eq("id", openCycle.id)
+        .eq("status", "AGUARDANDO_LIBERACAO");
+
+      if (abortErr) {
+        return jsonErrorCompat("Erro ao expirar reserva pendente.", 500, {
+          code: "db_error",
+          extra: { details: abortErr.message },
+        });
+      }
+
+      return NextResponse.json({
+        ok: true,
+        machine: {
+          id: input.condominio_maquinas_id,
+          status: "available",
+          reserved_until: null,
+        },
+      });
     }
 
     const retryAfterSec = reservedUntil ? Math.max(0, Math.ceil((new Date(reservedUntil).getTime() - now) / 1000)) : 120;
