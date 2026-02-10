@@ -1,0 +1,119 @@
+version: cfo_v1
+owner: cfo-module
+status: draft
+invariants:
+  mes_ref_format: "YYYY-MM-01"
+  condominio_id_type: "uuid"
+  currency: "BRL"
+  runtime_source: "ptbr_runtime_only"
+
+exports:
+  pagamentos:
+    source_view: vw_export_pagamentos_mes_v1
+    mode: read_only
+    fields:
+      - name: mes_ref
+        type: date
+        required: true
+        example: "2026-02-01"
+      - name: condominio_id
+        type: uuid
+        required: true
+      - name: receita_bruta
+        type: numeric
+        required: true
+      - name: taxas_pagamento_total
+        type: numeric
+        required: true
+      - name: cashback
+        type: numeric
+        required: true
+      - name: receita_liquida
+        type: numeric
+        required: true
+        formula: "receita_bruta - cashback - taxas_pagamento_total"
+      - name: qtd_ciclos_total
+        type: integer
+        required: true
+      - name: qtd_ciclos_lavadora
+        type: integer
+        required: true
+      - name: qtd_ciclos_secadora
+        type: integer
+        required: true
+      - name: ticket_medio_ciclo
+        type: numeric
+        required: true
+      - name: updated_at
+        type: timestamptz
+        required: true
+
+  auditorias:
+    source_view: vw_export_auditorias_mes_v1
+    mode: read_only
+    fields:
+      - name: mes_ref
+        type: date
+        required: true
+      - name: condominio_id
+        type: uuid
+        required: true
+      - name: custos_agua
+        type: numeric
+        required: true
+      - name: custos_energia
+        type: numeric
+        required: true
+      - name: custos_gas
+        type: numeric
+        required: true
+      - name: custos_quimicos
+        type: numeric
+        required: true
+      - name: custos_insumos_total
+        type: numeric
+        required: true
+      - name: status_auditoria
+        type: text
+        required: true
+      - name: auditoria_id
+        type: uuid
+        required: true
+      - name: updated_at
+        type: timestamptz
+        required: true
+
+  cfo_final:
+    source_view: vw_cfo_empresa_mes_final_v1
+    mode: read_only
+    fields:
+      - name: mes_ref
+        type: date
+        required: true
+      - name: receita_bruta
+        type: numeric
+        required: true
+      - name: cashback
+        type: numeric
+        required: true
+      - name: receita_liquida
+        type: numeric
+        required: true
+      - name: custos_insumos_total
+        type: numeric
+        required: true
+      - name: custos_operacionais
+        type: numeric
+        required: true
+      - name: resultado_operacional
+        type: numeric
+        required: true
+      - name: margem_operacional_pct
+        type: numeric
+        required: true
+
+compatibility:
+  breaking_change_policy: "new_version_required"
+  notes:
+    - "Mudança de campo/tipo/regra requer cfo_v2."
+    - "Consumers devem validar presença/tipo/invariantes."
