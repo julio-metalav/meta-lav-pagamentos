@@ -28,7 +28,7 @@ export default function AdminPosDevicesPage() {
   async function loadConds() {
     const r = await fetch("/api/admin/condominios?limit=100");
     const j = await r.json();
-    if (!r.ok || !j?.ok) throw new Error(j?.error_v1?.message || j?.error || "Falha ao carregar condomínios");
+    if (!r.ok || !j?.ok) throw new Error(j?.error_v1?.message || j?.error || "Falha ao carregar lojas");
     const list = j.items || [];
     setConds(list);
     if (!condominioId && list[0]?.id) setCondominioId(list[0].id);
@@ -100,7 +100,7 @@ export default function AdminPosDevicesPage() {
   }
 
   useEffect(() => {
-    loadConds().catch((e) => setMsg(e?.message || "Erro ao carregar condomínios."));
+    loadConds().catch((e) => setMsg(e?.message || "Erro ao carregar lojas."));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -115,7 +115,7 @@ export default function AdminPosDevicesPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">POS Devices</h1>
-            <p className="text-sm text-zinc-600">Gestão clara dos terminais POS por condomínio, com operação rápida.</p>
+            <p className="text-sm text-zinc-600">Gestão clara dos terminais POS por loja, com operação rápida.</p>
           </div>
           <button onClick={openCreate} className="rounded-lg bg-zinc-900 text-white px-4 py-2 font-medium hover:bg-zinc-800">
             + Novo POS
@@ -124,7 +124,7 @@ export default function AdminPosDevicesPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <StatCard label="Total POS" value={String(stats.total)} />
-          <StatCard label="Condomínios" value={String(stats.condCount)} />
+          <StatCard label="Lojas" value={String(stats.condCount)} />
           <StatCard label="Cobertura" value={stats.total > 0 ? "Ativa" : "—"} tone={stats.total > 0 ? "ok" : "muted"} />
         </div>
 
@@ -142,7 +142,7 @@ export default function AdminPosDevicesPage() {
               value={filterCondominioId}
               onChange={(e) => setFilterCondominioId(e.target.value)}
             >
-              <option value="">Todos os condomínios</option>
+              <option value="">Todos os lojas</option>
               {conds.map((c) => (
                 <option key={c.id} value={c.id}>{c.nome}</option>
               ))}
@@ -170,7 +170,7 @@ export default function AdminPosDevicesPage() {
                 <thead className="bg-zinc-50 text-zinc-600">
                   <tr>
                     <th className="text-left px-4 py-3 font-medium">Serial</th>
-                    <th className="text-left px-4 py-3 font-medium">Condomínio</th>
+                    <th className="text-left px-4 py-3 font-medium">Loja</th>
                     <th className="text-left px-4 py-3 font-medium">Status</th>
                     <th className="text-left px-4 py-3 font-medium">ID</th>
                   </tr>
@@ -215,9 +215,9 @@ export default function AdminPosDevicesPage() {
               </div>
 
               <div>
-                <label className="text-xs text-zinc-500">Condomínio</label>
+                <label className="text-xs text-zinc-500">Loja</label>
                 <select className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2" value={condominioId} onChange={(e) => setCondominioId(e.target.value)}>
-                  <option value="">Selecione o condomínio</option>
+                  <option value="">Selecione o loja</option>
                   {conds.map((c) => (
                     <option key={c.id} value={c.id}>{c.nome}</option>
                   ))}

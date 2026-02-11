@@ -45,7 +45,7 @@ export default function AdminMaquinasPage() {
 
   async function loadCondominios() {
     const c = await (await fetch("/api/admin/condominios?limit=100")).json();
-    if (!c?.ok) throw new Error(c?.error_v1?.message || c?.error || "Falha ao carregar condomínios");
+    if (!c?.ok) throw new Error(c?.error_v1?.message || c?.error || "Falha ao carregar lojas");
     const condsData = c.items || [];
     setConds(condsData);
     const cid = condominioId || condsData?.[0]?.id || "";
@@ -183,7 +183,7 @@ export default function AdminMaquinasPage() {
         <div className="rounded-xl bg-white p-4 border border-zinc-200 shadow-sm space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
             <select className="rounded-lg border border-zinc-300 px-3 py-2" value={condominioId} onChange={(e) => onCondominioChange(e.target.value)}>
-              <option value="">Condomínio</option>
+              <option value="">Loja</option>
               {conds.map((c) => (
                 <option key={c.id} value={c.id}>{c.nome}</option>
               ))}
@@ -216,7 +216,7 @@ export default function AdminMaquinasPage() {
           ) : filteredItems.length === 0 ? (
             <div className="p-10 text-center">
               <p className="text-sm text-zinc-500">Nenhuma máquina encontrada.</p>
-              <p className="text-xs text-zinc-400 mt-1">Crie a primeira máquina para habilitar operação no condomínio.</p>
+              <p className="text-xs text-zinc-400 mt-1">Crie a primeira máquina para habilitar operação no loja.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -266,9 +266,9 @@ export default function AdminMaquinasPage() {
             <form onSubmit={onCreate} className="p-5 space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-zinc-500">Condomínio</label>
+                  <label className="text-xs text-zinc-500">Loja</label>
                   <select className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2" value={condominioId} onChange={(e) => onCondominioChange(e.target.value)}>
-                    <option value="">Condomínio</option>
+                    <option value="">Loja</option>
                     {conds.map((c) => (
                       <option key={c.id} value={c.id}>{c.nome}</option>
                     ))}

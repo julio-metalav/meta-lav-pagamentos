@@ -17,7 +17,7 @@ function groupPermissions(): PermGroup[] {
     { key: "gateways", title: "Gateways", match: (c) => c.startsWith("admin.gateways.") },
     { key: "pos", title: "POS Devices", match: (c) => c.startsWith("admin.pos_devices.") },
     { key: "maquinas", title: "Máquinas", match: (c) => c.startsWith("admin.maquinas.") },
-    { key: "condominios", title: "Condomínios", match: (c) => c.startsWith("admin.condominios.") },
+    { key: "condominios", title: "Lojas", match: (c) => c.startsWith("admin.condominios.") },
   ];
 
   return groups

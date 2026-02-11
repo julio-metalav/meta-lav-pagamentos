@@ -27,7 +27,7 @@ export default function AdminCondominiosPage() {
       if (!res.ok || !data?.ok) throw new Error(data?.error_v1?.message || data?.error || "Falha ao carregar");
       setItems(data.items || []);
     } catch (e: any) {
-      setMessage(e?.message || "Erro ao carregar condomínios.");
+      setMessage(e?.message || "Erro ao carregar lojas.");
     } finally {
       setLoading(false);
     }
@@ -50,10 +50,10 @@ export default function AdminCondominiosPage() {
       if (!res.ok || !data?.ok) throw new Error(data?.error_v1?.message || data?.error || "Falha ao criar");
 
       setNome("");
-      setMessage("Condomínio criado com sucesso.");
+      setMessage("Loja criado com sucesso.");
       await load();
     } catch (e: any) {
-      setMessage(e?.message || "Erro ao criar condomínio.");
+      setMessage(e?.message || "Erro ao criar loja.");
     } finally {
       setCreating(false);
     }
@@ -67,14 +67,14 @@ export default function AdminCondominiosPage() {
   return (
     <div className="min-h-screen bg-zinc-50 p-6 text-zinc-900">
       <div className="mx-auto max-w-3xl space-y-4">
-        <h1 className="text-2xl font-semibold">Admin · Condomínios</h1>
+        <h1 className="text-2xl font-semibold">Admin · Lojas</h1>
 
         <form onSubmit={onCreate} className="rounded-xl bg-white p-4 shadow-sm border border-zinc-200 space-y-3">
-          <label className="block text-sm font-medium">Novo condomínio</label>
+          <label className="block text-sm font-medium">Novo loja</label>
           <div className="flex gap-2">
             <input
               className="flex-1 rounded-lg border border-zinc-300 px-3 py-2"
-              placeholder="Ex.: Condomínio Teste Pagamentos"
+              placeholder="Ex.: Loja Teste Pagamentos"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
             />
@@ -106,7 +106,7 @@ export default function AdminCondominiosPage() {
           {loading ? (
             <p className="text-sm text-zinc-500">Carregando...</p>
           ) : items.length === 0 ? (
-            <p className="text-sm text-zinc-500">Nenhum condomínio encontrado.</p>
+            <p className="text-sm text-zinc-500">Nenhum loja encontrado.</p>
           ) : (
             <ul className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg">
               {items.map((c) => (
