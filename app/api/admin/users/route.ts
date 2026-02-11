@@ -71,13 +71,14 @@ export async function POST(req: Request) {
   const url = `${appUrl()}/admin/activate?token=${encodeURIComponent(plain)}`;
   const text = `Meta-Lav Pagamentos — convite de acesso\n\nAcesse o link para definir sua senha (expira em 24h):\n${url}`;
 
-  // enqueue email via outbox
+  // enqueue via outbox (temporary: WhatsApp) — until email channel exists in OpenClaw
+  const adminWhatsTarget = String(process.env.ADMIN_WHATSAPP_TARGET || "+5567984020002");
   await sb.from("alert_outbox").insert({
     event_code: "admin_invite",
     severity: "info",
     fingerprint: tokenHash,
-    channel: "email",
-    target: email,
+    channel: "whatsapp",
+    target: adminWhatsTarget,
     text,
     status: "pending",
     attempts: 0,

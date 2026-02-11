@@ -33,12 +33,14 @@ export async function POST(req: Request) {
   const url = `${appUrl()}/admin/reset?token=${encodeURIComponent(plain)}`;
   const text = `Meta-Lav Pagamentos — reset de senha\n\nAcesse o link para criar uma nova senha (expira em 30 min):\n${url}`;
 
+  // enqueue via outbox (temporary: WhatsApp) — until email channel exists in OpenClaw
+  const adminWhatsTarget = String(process.env.ADMIN_WHATSAPP_TARGET || "+5567984020002");
   await sb.from("alert_outbox").insert({
     event_code: "admin_reset",
     severity: "info",
     fingerprint: tokenHash,
-    channel: "email",
-    target: email,
+    channel: "whatsapp",
+    target: adminWhatsTarget,
     text,
     status: "pending",
     attempts: 0,
