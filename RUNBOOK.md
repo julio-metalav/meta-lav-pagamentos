@@ -214,3 +214,14 @@ openclaw channels status
 
 **Caso 3: itens foram para `dead/max_attempts`**
 - Não serão mais processados (o scan só pega `pending/failed`). Gere novo teste ou reset manual (com cuidado).
+
+---
+
+## 7) Nomenclatura UI (padrão)
+
+Para evitar regressões de linguagem no produto:
+- **UI:** usar **Loja/Lojas**
+- **Interno técnico:** manter `condominio_id` e estruturas existentes
+
+Referência oficial:
+- `docs/ui-terms.md`
