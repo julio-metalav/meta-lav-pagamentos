@@ -17,7 +17,7 @@ function PosFailureContent() {
 
         <div className="rounded-lg border border-[var(--border)] p-3 text-xs text-[var(--text-secondary)] space-y-1">
           <p>POS ID: {pos_serial || "N/A"}</p>
-          <p>Condomínio: {condominio_id || "N/A"}</p>
+          <p>Loja: {condominio_id || "N/A"}</p>
           <p>Erro técnico: timeout / indisponível</p>
         </div>
 
