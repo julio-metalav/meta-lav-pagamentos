@@ -2,12 +2,14 @@
 
 import { useMemo, useState } from "react";
 
+type Notice = { tone: "neutral" | "success" | "error"; text: string } | null;
+
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<Notice>(null);
 
   const next = useMemo(() => {
     if (typeof window === "undefined") return "/admin";
@@ -27,9 +29,10 @@ export default function AdminLoginPage() {
       });
       const j = await r.json();
       if (!r.ok || !j?.ok) throw new Error(j?.error_v1?.message || j?.error || "Falha no login");
+      setMsg({ tone: "success", text: "Login validado. Redirecionando..." });
       window.location.href = next;
     } catch (err: any) {
-      setMsg(err?.message || "Erro no login.");
+      setMsg({ tone: "error", text: err?.message || "Erro no login." });
     } finally {
       setBusy(false);
     }
@@ -41,7 +44,19 @@ export default function AdminLoginPage() {
         <h1 className="text-lg font-semibold">Admin · Login</h1>
         <p className="text-xs text-zinc-500 mt-1">Sessão dura 1 hora. “Salvar acesso” mantém o cookie por esse período.</p>
 
-        {msg && <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">{msg}</div>}
+        {msg && (
+          <div
+            className={`mt-3 rounded-lg px-3 py-2 text-sm border ${
+              msg.tone === "error"
+                ? "border-red-200 bg-red-50 text-red-700"
+                : msg.tone === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-zinc-200 bg-zinc-50 text-zinc-700"
+            }`}
+          >
+            {msg.text}
+          </div>
+        )}
 
         <form className="mt-4 space-y-3" onSubmit={onSubmit}>
           <div>
