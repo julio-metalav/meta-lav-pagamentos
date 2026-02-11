@@ -8,6 +8,28 @@ type UserItem = { id: string; email: string; name: string | null; enabled: boole
 type Notice = { tone: "neutral" | "success" | "error"; text: string } | null;
 
 type PermGroup = { key: string; title: string; items: Array<(typeof PERMISSIONS)[number]> };
+type ProfileKey = "read_only" | "operacao" | "gestor";
+
+function profilePermissions(kind: ProfileKey): string[] {
+  const all = PERMISSIONS.map((p) => p.code);
+  if (kind === "gestor") return all;
+
+  if (kind === "read_only") {
+    return all.filter((c) => c.endsWith(".read") || c === "dashboard.read");
+  }
+
+  // operacao: leitura ampla + escrita operacional (sem usuários)
+  return all.filter((c) => {
+    if (c === "dashboard.read") return true;
+    if (c.startsWith("alerts.")) return true;
+    if (c.startsWith("admin.users.")) return c.endsWith(".read");
+    if (c.startsWith("admin.gateways.")) return true;
+    if (c.startsWith("admin.pos_devices.")) return true;
+    if (c.startsWith("admin.maquinas.")) return true;
+    if (c.startsWith("admin.condominios.")) return true;
+    return false;
+  });
+}
 
 function groupPermissions(): PermGroup[] {
   const groups: Array<{ key: string; title: string; match: (code: string) => boolean }> = [
@@ -129,6 +151,10 @@ export default function AdminUsersPage() {
     setAllowed(next);
   }
 
+  function applyProfile(kind: ProfileKey) {
+    setAllowed(new Set(profilePermissions(kind)));
+  }
+
   function selectAll() {
     setAllowed(new Set(PERMISSIONS.map((p) => p.code)));
   }
@@ -233,6 +259,9 @@ export default function AdminUsersPage() {
               ) : (
                 <>
                   <div className="flex flex-wrap gap-2 items-center">
+                    <button type="button" onClick={() => applyProfile("read_only")} className="rounded-md border border-blue-300 text-blue-700 px-2.5 py-1 text-xs hover:bg-blue-50">Perfil: Leitura</button>
+                    <button type="button" onClick={() => applyProfile("operacao")} className="rounded-md border border-blue-300 text-blue-700 px-2.5 py-1 text-xs hover:bg-blue-50">Perfil: Operação</button>
+                    <button type="button" onClick={() => applyProfile("gestor")} className="rounded-md border border-blue-300 text-blue-700 px-2.5 py-1 text-xs hover:bg-blue-50">Perfil: Gestor</button>
                     <button type="button" onClick={selectAll} className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-50">Selecionar tudo</button>
                     <button type="button" onClick={clearAll} className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-50">Limpar tudo</button>
                     <span className="text-xs text-zinc-500">{selectedCount} permissões selecionadas</span>
