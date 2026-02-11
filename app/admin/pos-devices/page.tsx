@@ -142,7 +142,7 @@ export default function AdminPosDevicesPage() {
               value={filterCondominioId}
               onChange={(e) => setFilterCondominioId(e.target.value)}
             >
-              <option value="">Todos os lojas</option>
+              <option value="">Todas as lojas</option>
               {conds.map((c) => (
                 <option key={c.id} value={c.id}>{c.nome}</option>
               ))}
@@ -217,7 +217,7 @@ export default function AdminPosDevicesPage() {
               <div>
                 <label className="text-xs text-zinc-500">Loja</label>
                 <select className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2" value={condominioId} onChange={(e) => setCondominioId(e.target.value)}>
-                  <option value="">Selecione o loja</option>
+                  <option value="">Selecione a loja</option>
                   {conds.map((c) => (
                     <option key={c.id} value={c.id}>{c.nome}</option>
                   ))}
