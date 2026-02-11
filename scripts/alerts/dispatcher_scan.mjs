@@ -17,8 +17,17 @@ const sb = createClient(url, key);
 
 const limit = Math.min(50, Math.max(1, Number(process.env.ALERTS_OUTBOX_DISPATCH_LIMIT || 20)));
 const maxAttempts = Math.min(50, Math.max(1, Number(process.env.ALERTS_OUTBOX_MAX_ATTEMPTS || 10)));
+const sendingTimeoutMs = Math.min(60 * 60 * 1000, Math.max(30 * 1000, Number(process.env.ALERTS_OUTBOX_SENDING_TIMEOUT_MS || 5 * 60 * 1000)));
 
 async function main() {
+  // Hardening: if an item is stuck in `sending` for too long (crash/restart), move it back to `failed`.
+  const cutoffIso = new Date(Date.now() - sendingTimeoutMs).toISOString();
+  await sb
+    .from("alert_outbox")
+    .update({ status: "failed", last_error: "sending_timeout" })
+    .eq("status", "sending")
+    .lt("updated_at", cutoffIso);
+
   const { data: rows, error } = await sb
     .from("alert_outbox")
     .select("id,event_code,severity,fingerprint,channel,target,text,status,attempts")
