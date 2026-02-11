@@ -5,10 +5,30 @@ import { PERMISSIONS } from "@/lib/admin/permissions";
 
 type UserItem = { id: string; email: string; name: string | null; enabled: boolean; status: string; created_at: string; last_login_at: string | null };
 
+type Notice = { tone: "neutral" | "success" | "error"; text: string } | null;
+
+type PermGroup = { key: string; title: string; items: Array<(typeof PERMISSIONS)[number]> };
+
+function groupPermissions(): PermGroup[] {
+  const groups: Array<{ key: string; title: string; match: (code: string) => boolean }> = [
+    { key: "dashboard", title: "Dashboard", match: (c) => c.startsWith("dashboard.") },
+    { key: "alerts", title: "Alertas", match: (c) => c.startsWith("alerts.") },
+    { key: "users", title: "Usuários", match: (c) => c.startsWith("admin.users.") },
+    { key: "gateways", title: "Gateways", match: (c) => c.startsWith("admin.gateways.") },
+    { key: "pos", title: "POS Devices", match: (c) => c.startsWith("admin.pos_devices.") },
+    { key: "maquinas", title: "Máquinas", match: (c) => c.startsWith("admin.maquinas.") },
+    { key: "condominios", title: "Condomínios", match: (c) => c.startsWith("admin.condominios.") },
+  ];
+
+  return groups
+    .map((g) => ({ key: g.key, title: g.title, items: PERMISSIONS.filter((p) => g.match(p.code)) }))
+    .filter((g) => g.items.length > 0);
+}
+
 export default function AdminUsersPage() {
   const [items, setItems] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<Notice>(null);
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -18,7 +38,11 @@ export default function AdminUsersPage() {
   const selected = useMemo(() => items.find((x) => x.id === selectedId) || null, [items, selectedId]);
 
   const [allowed, setAllowed] = useState<Set<string>>(new Set());
+  const [loadingPerms, setLoadingPerms] = useState(false);
   const [savingPerms, setSavingPerms] = useState(false);
+
+  const permGroups = useMemo(() => groupPermissions(), []);
+  const selectedCount = allowed.size;
 
   async function load() {
     setLoading(true);
@@ -29,10 +53,30 @@ export default function AdminUsersPage() {
       if (!r.ok || !j?.ok) throw new Error(j?.error_v1?.message || j?.error || "Falha ao carregar");
       setItems(j.items || []);
     } catch (e: any) {
-      setMsg(e?.message || "Erro.");
+      setMsg({ tone: "error", text: e?.message || "Erro ao carregar usuários." });
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadUserPermissions(userId: string) {
+    setLoadingPerms(true);
+    try {
+      const r = await fetch(`/api/admin/users/${userId}/permissions`);
+      const j = await r.json();
+      if (!r.ok || !j?.ok) throw new Error(j?.error_v1?.message || j?.error || "Falha ao carregar permissões");
+      setAllowed(new Set((j.allowed || []).map((x: string) => String(x))));
+    } catch (e: any) {
+      setAllowed(new Set());
+      setMsg({ tone: "error", text: e?.message || "Erro ao carregar permissões do usuário." });
+    } finally {
+      setLoadingPerms(false);
+    }
+  }
+
+  async function onSelectUser(id: string) {
+    setSelectedId(id);
+    await loadUserPermissions(id);
   }
 
   async function createUser(e: any) {
@@ -47,12 +91,12 @@ export default function AdminUsersPage() {
       });
       const j = await r.json();
       if (!r.ok || !j?.ok) throw new Error(j?.error_v1?.message || j?.error || "Falha ao criar");
-      setMsg("Convite enviado (via email) — verifique outbox.");
+      setMsg({ tone: "success", text: "Convite enviado. Link de ativação enfileirado no outbox." });
       setEmail("");
       setName("");
       await load();
     } catch (e: any) {
-      setMsg(e?.message || "Erro.");
+      setMsg({ tone: "error", text: e?.message || "Erro ao criar usuário." });
     } finally {
       setCreating(false);
     }
@@ -70,12 +114,39 @@ export default function AdminUsersPage() {
       });
       const j = await r.json();
       if (!r.ok || !j?.ok) throw new Error(j?.error_v1?.message || j?.error || "Falha ao salvar permissões");
-      setMsg("Permissões salvas.");
+      setMsg({ tone: "success", text: `Permissões salvas (${allowed.size} selecionadas).` });
     } catch (e: any) {
-      setMsg(e?.message || "Erro.");
+      setMsg({ tone: "error", text: e?.message || "Erro ao salvar permissões." });
     } finally {
       setSavingPerms(false);
     }
+  }
+
+  function togglePermission(code: string, checked: boolean) {
+    const next = new Set(Array.from(allowed.values()));
+    if (checked) next.add(code);
+    else next.delete(code);
+    setAllowed(next);
+  }
+
+  function selectAll() {
+    setAllowed(new Set(PERMISSIONS.map((p) => p.code)));
+  }
+
+  function clearAll() {
+    setAllowed(new Set());
+  }
+
+  function selectModule(group: PermGroup) {
+    const next = new Set(Array.from(allowed.values()));
+    for (const p of group.items) next.add(p.code);
+    setAllowed(next);
+  }
+
+  function clearModule(group: PermGroup) {
+    const next = new Set(Array.from(allowed.values()));
+    for (const p of group.items) next.delete(p.code);
+    setAllowed(next);
   }
 
   useEffect(() => {
@@ -92,7 +163,19 @@ export default function AdminUsersPage() {
       </header>
 
       <main className="mx-auto max-w-6xl p-6 space-y-4">
-        {msg && <div className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm">{msg}</div>}
+        {msg && (
+          <div
+            className={`rounded-lg border px-3 py-2 text-sm ${
+              msg.tone === "error"
+                ? "border-red-200 bg-red-50 text-red-700"
+                : msg.tone === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-zinc-300 bg-white text-zinc-700"
+            }`}
+          >
+            {msg.text}
+          </div>
+        )}
 
         <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <h2 className="font-medium">Convidar usuário</h2>
@@ -103,7 +186,7 @@ export default function AdminUsersPage() {
               {creating ? "Enviando..." : "Enviar convite"}
             </button>
           </form>
-          <p className="text-xs text-zinc-500 mt-2">O usuário recebe um link para definir a senha.</p>
+          <p className="text-xs text-zinc-500 mt-2">O usuário recebe link para definir senha (via outbox/dispatcher).</p>
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -124,7 +207,7 @@ export default function AdminUsersPage() {
                   {items.map((u) => (
                     <tr key={u.id} className={selectedId === u.id ? "bg-amber-50" : ""}>
                       <td className="px-3 py-2">
-                        <button className="text-left w-full" onClick={() => setSelectedId(u.id)}>
+                        <button className="text-left w-full" onClick={() => onSelectUser(u.id)}>
                           <p className="font-medium">{u.email}</p>
                           <p className="text-xs text-zinc-500">{u.name || "—"}</p>
                         </button>
@@ -145,26 +228,43 @@ export default function AdminUsersPage() {
             <div className="p-4 space-y-3">
               {!selected ? (
                 <p className="text-sm text-zinc-500">Selecione um usuário para editar permissões.</p>
+              ) : loadingPerms ? (
+                <p className="text-sm text-zinc-500">Carregando permissões...</p>
               ) : (
                 <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {PERMISSIONS.map((p) => (
-                      <label key={p.code} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={allowed.has(p.code)}
-                          onChange={(e) => {
-                            const next = new Set(Array.from(allowed.values()));
-                            if (e.target.checked) next.add(p.code);
-                            else next.delete(p.code);
-                            setAllowed(next);
-                          }}
-                        />
-                        <span>{p.name}</span>
-                        <span className="text-xs text-zinc-400">({p.code})</span>
-                      </label>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <button type="button" onClick={selectAll} className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-50">Selecionar tudo</button>
+                    <button type="button" onClick={clearAll} className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-50">Limpar tudo</button>
+                    <span className="text-xs text-zinc-500">{selectedCount} permissões selecionadas</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {permGroups.map((group) => (
+                      <div key={group.key} className="rounded-lg border border-zinc-200 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                          <h3 className="text-sm font-medium">{group.title}</h3>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => selectModule(group)} className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50">Selecionar módulo</button>
+                            <button type="button" onClick={() => clearModule(group)} className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50">Limpar módulo</button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {group.items.map((p) => (
+                            <label key={p.code} className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={allowed.has(p.code)}
+                                onChange={(e) => togglePermission(p.code, e.target.checked)}
+                              />
+                              <span>{p.name}</span>
+                              <span className="text-xs text-zinc-400">({p.code})</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
+
                   <button
                     disabled={savingPerms}
                     onClick={savePermissions}
@@ -173,7 +273,7 @@ export default function AdminUsersPage() {
                     {savingPerms ? "Salvando..." : "Salvar permissões"}
                   </button>
                   <p className="text-xs text-zinc-500">
-                    Nota: este é um override por usuário. O Gestor tem permissões por role; para admins abaixo, você pode conceder apenas o necessário.
+                    Override por usuário: o Gestor pode delegar granularmente por módulo/tela para admins abaixo.
                   </p>
                 </>
               )}

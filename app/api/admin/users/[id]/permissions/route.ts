@@ -6,6 +6,33 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { requireAdminSession, requirePermission } from "@/lib/admin/server";
 
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const sess = await requireAdminSession();
+  if (!sess.ok) return jsonErrorCompat("Unauthorized", 401, { code: "unauthorized" });
+
+  const ok = await requirePermission(sess.user.id, "admin.users.read");
+  if (!ok) return jsonErrorCompat("Forbidden", 403, { code: "forbidden" });
+
+  const { id } = await ctx.params;
+  const sb = supabaseAdmin() as any;
+
+  const { data, error } = await sb
+    .from("admin_user_permissions")
+    .select("allowed, admin_permissions(code)")
+    .eq("user_id", id);
+
+  if (error) return jsonErrorCompat("Erro ao carregar permissões.", 500, { code: "db_error", extra: { details: error.message } });
+
+  const allowed: string[] = [];
+  for (const row of data || []) {
+    const code = String((row as any).admin_permissions?.code || "");
+    const allow = Boolean((row as any).allowed);
+    if (code && allow) allowed.push(code);
+  }
+
+  return NextResponse.json({ ok: true, allowed: Array.from(new Set(allowed)).sort() });
+}
+
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const sess = await requireAdminSession();
   if (!sess.ok) return jsonErrorCompat("Unauthorized", 401, { code: "unauthorized" });
@@ -25,7 +52,6 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   const byCode = new Map<string, string>();
   for (const p of perms || []) byCode.set(String(p.code), String(p.id));
 
-  // Reset overrides: delete existing, insert allowed overrides.
   await sb.from("admin_user_permissions").delete().eq("user_id", id);
 
   const rows = allowed
