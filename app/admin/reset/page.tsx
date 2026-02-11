@@ -2,6 +2,16 @@
 
 import { useMemo, useState } from "react";
 
+type LatestReset = {
+  id: string;
+  channel: string;
+  target: string;
+  status: string;
+  created_at: string;
+  sent_at: string | null;
+  link: string | null;
+};
+
 type Notice = { tone: "neutral" | "success" | "error"; text: string } | null;
 
 export default function ResetPage() {
@@ -14,6 +24,8 @@ export default function ResetPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Notice>(null);
+  const [latest, setLatest] = useState<LatestReset | null>(null);
+  const [loadingLatest, setLoadingLatest] = useState(false);
 
   async function requestReset(e: any) {
     e.preventDefault();
@@ -31,10 +43,35 @@ export default function ResetPage() {
         tone: "success",
         text: "Solicitação recebida. Se o usuário existir, o link de reset será enviado no WhatsApp do gestor.",
       });
+      await loadLatestLink();
     } catch (err: any) {
       setMsg({ tone: "error", text: err?.message || "Erro ao solicitar reset." });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function loadLatestLink() {
+    setLoadingLatest(true);
+    try {
+      const r = await fetch("/api/admin/auth/reset/latest-link");
+      const j = await r.json();
+      if (!r.ok || !j?.ok) throw new Error(j?.error_v1?.message || j?.error || "Falha ao buscar último link");
+      setLatest((j?.item || null) as LatestReset | null);
+    } catch (err: any) {
+      setMsg({ tone: "error", text: err?.message || "Erro ao buscar último link." });
+    } finally {
+      setLoadingLatest(false);
+    }
+  }
+
+  async function copyLatestLink() {
+    if (!latest?.link) return;
+    try {
+      await navigator.clipboard.writeText(latest.link);
+      setMsg({ tone: "success", text: "Último link copiado para a área de transferência." });
+    } catch {
+      setMsg({ tone: "error", text: "Não foi possível copiar automaticamente. Copie manualmente abaixo." });
     }
   }
 
@@ -81,15 +118,47 @@ export default function ResetPage() {
         )}
 
         {!token ? (
-          <form className="mt-4 space-y-3" onSubmit={requestReset}>
-            <div>
-              <label className="text-xs text-zinc-600">Email</label>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
+          <>
+            <form className="mt-4 space-y-3" onSubmit={requestReset}>
+              <div>
+                <label className="text-xs text-zinc-600">Email</label>
+                <input value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
+              </div>
+              <button disabled={busy} className="w-full rounded-md bg-slate-700 text-white py-2 text-sm hover:bg-slate-800 disabled:opacity-50">
+                {busy ? "Enviando..." : "Enviar link"}
+              </button>
+            </form>
+
+            <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-zinc-600">Fallback operacional: último link gerado</p>
+                <button
+                  type="button"
+                  onClick={loadLatestLink}
+                  disabled={loadingLatest}
+                  className="rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-white disabled:opacity-50"
+                >
+                  {loadingLatest ? "Carregando..." : "Atualizar"}
+                </button>
+              </div>
+
+              {latest?.link ? (
+                <>
+                  <p className="text-[11px] text-zinc-500">status={latest.status} · criado em {new Date(latest.created_at).toLocaleString()}</p>
+                  <div className="rounded border bg-white px-2 py-1 text-xs break-all">{latest.link}</div>
+                  <button
+                    type="button"
+                    onClick={copyLatestLink}
+                    className="rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-white"
+                  >
+                    Copiar link
+                  </button>
+                </>
+              ) : (
+                <p className="text-xs text-zinc-500">Sem link carregado ainda. Clique em “Atualizar” após solicitar reset.</p>
+              )}
             </div>
-            <button disabled={busy} className="w-full rounded-md bg-slate-700 text-white py-2 text-sm hover:bg-slate-800 disabled:opacity-50">
-              {busy ? "Enviando..." : "Enviar link"}
-            </button>
-          </form>
+          </>
         ) : (
           <form className="mt-4 space-y-3" onSubmit={confirmReset}>
             <div>
