@@ -225,3 +225,37 @@ Para evitar regressões de linguagem no produto:
 
 Referência oficial:
 - `docs/ui-terms.md`
+
+---
+
+## 8) Perfis prontos de permissão (Admin · Usuários)
+
+Tela: `/admin/users` (seção Permissões)
+
+Perfis disponíveis com 1 clique:
+
+### Perfil: Leitura
+- Seleciona apenas permissões `*.read` + `dashboard.read`
+- Uso recomendado: auditoria, consulta, acompanhamento sem ação operacional
+
+### Perfil: Operação
+- Inclui:
+  - `dashboard.read`
+  - tudo de `alerts.*`
+  - `admin.users.read`
+  - leitura/escrita de:
+    - `admin.gateways.*`
+    - `admin.pos_devices.*`
+    - `admin.maquinas.*`
+    - `admin.condominios.*`
+- Uso recomendado: time operacional diário
+- Não inclui gestão completa de usuários (`admin.users.write`)
+
+### Perfil: Gestor
+- Seleciona todas as permissões disponíveis
+- Uso recomendado: responsáveis com poder de delegação e administração total
+
+### Regra de uso
+- Começar pelo menor privilégio necessário (Leitura/Operação)
+- Escalar para Gestor apenas quando realmente necessário
+- Revisar permissões periodicamente (mínimo mensal)
