@@ -26,6 +26,7 @@ export default function ResetPage() {
   const [msg, setMsg] = useState<Notice>(null);
   const [latest, setLatest] = useState<LatestReset | null>(null);
   const [loadingLatest, setLoadingLatest] = useState(false);
+  const [showLink, setShowLink] = useState(false);
 
   async function requestReset(e: any) {
     e.preventDefault();
@@ -58,6 +59,7 @@ export default function ResetPage() {
       const j = await r.json();
       if (!r.ok || !j?.ok) throw new Error(j?.error_v1?.message || j?.error || "Falha ao buscar último link");
       setLatest((j?.item || null) as LatestReset | null);
+      setShowLink(false);
     } catch (err: any) {
       setMsg({ tone: "error", text: err?.message || "Erro ao buscar último link." });
     } finally {
@@ -145,14 +147,27 @@ export default function ResetPage() {
               {latest?.link ? (
                 <>
                   <p className="text-[11px] text-zinc-500">status={latest.status} · criado em {new Date(latest.created_at).toLocaleString()}</p>
-                  <div className="rounded border bg-white px-2 py-1 text-xs break-all">{latest.link}</div>
-                  <button
-                    type="button"
-                    onClick={copyLatestLink}
-                    className="rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-white"
-                  >
-                    Copiar link
-                  </button>
+                  <div className="rounded border bg-white px-2 py-1 text-xs break-all">
+                    {showLink
+                      ? latest.link
+                      : `${latest.link.slice(0, 42)}...${latest.link.slice(-10)}`}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowLink((v) => !v)}
+                      className="rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-white"
+                    >
+                      {showLink ? "Ocultar" : "Exibir"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={copyLatestLink}
+                      className="rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-white"
+                    >
+                      Copiar link
+                    </button>
+                  </div>
                 </>
               ) : (
                 <p className="text-xs text-zinc-500">Sem link carregado ainda. Clique em “Atualizar” após solicitar reset.</p>
