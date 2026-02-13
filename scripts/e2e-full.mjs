@@ -9,7 +9,10 @@ function fail(msg, body) {
 
 function loadEnvLocal() {
   const p = ".env.local";
-  if (!fs.existsSync(p)) fail(".env.local não encontrado (requerido para HMAC/URLs)");
+  if (!fs.existsSync(p)) {
+    console.log("[env] .env.local não encontrado — usando process.env (CI mode)");
+    return;
+  }
   const lines = fs.readFileSync(p, "utf8").split(/\r?\n/);
   for (const raw of lines) {
     const line = raw.trim();
