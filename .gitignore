@@ -39,3 +39,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# OpenClaw local artifacts
+AGENTS.md
+BOOTSTRAP.md
+HEARTBEAT.md
+IDENTITY.md
+MEMORY.md
+SOUL.md
+TOOLS.md
+USER.md
+
+# local scratch artifacts
+cd
+findstr
+
+# generated supabase exports
+supabase_openapi_public.json
+rpc_meta_columns.json
