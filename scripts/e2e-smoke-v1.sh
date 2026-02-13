@@ -96,11 +96,11 @@ fi
 
 # 5) /api/iot/ack
 NOW_TS=$(date +%s)
-ACK_BODY=$(jq -cn --arg cmd "$CMD_ID" --argjson ok true --arg ts "$NOW_TS" --arg mid "$IDENTIFICADOR_LOCAL" '{cmd_id:$cmd,ok:$ok,ts:$ts,machine_id:$mid}')
+ACK_BODY=$(jq -cn --arg cmd "$CMD_ID" --argjson ok true --argjson ts "$NOW_TS" --arg mid "$IDENTIFICADOR_LOCAL" '{cmd_id:$cmd,ok:$ok,ts:$ts,machine_id:$mid}')
 RESP5=$(curl_json POST "$BASE_URL/api/iot/ack" "$ACK_BODY" 200)
 
 # 6) /api/iot/evento (minimal)
-EV_BODY=$(jq -cn --arg type "cycle_started" --arg cmd "$CMD_ID" --arg ts "$NOW_TS" --arg mid "$IDENTIFICADOR_LOCAL" '{type:$type,cmd_id:$cmd,ts:$ts,machine_id:$mid,meta:{}}')
+EV_BODY=$(jq -cn --arg type "cycle_started" --arg cmd "$CMD_ID" --argjson ts "$NOW_TS" --arg mid "$IDENTIFICADOR_LOCAL" '{type:$type,cmd_id:$cmd,ts:$ts,machine_id:$mid,meta:{}}')
 RESP6=$(curl_json POST "$BASE_URL/api/iot/evento" "$EV_BODY" 200)
 
 # --- DB VALIDATION ---
