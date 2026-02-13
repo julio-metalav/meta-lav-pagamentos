@@ -57,15 +57,16 @@ http_status() {
 
 curl_json() {
   local method="$1" url="$2" data="${3:-}" expect="${4:-200}"
-  : >"${HDRS}"; : >"${BODY}"
+  : >"${BODY}"
+  local status
   if [[ -n "${data}" ]]; then
-    curl -sS -D "${HDRS}" -o "${BODY}" -H 'content-type: application/json' -X "$method" --data "$data" "$url" || true
+    status=$(curl -sS -o "${BODY}" -w "%{http_code}" -H 'content-type: application/json' -X "$method" --data "$data" "$url" || true)
   else
-    curl -sS -D "${HDRS}" -o "${BODY}" -X "$method" "$url" || true
+    status=$(curl -sS -o "${BODY}" -w "%{http_code}" -X "$method" "$url" || true)
   fi
-  local st; st="$(http_status || echo 000)"
-  if [[ "${st}" != "${expect}" ]]; then
-    echo "HTTP $st when calling $method $url" >&2
+  if [[ -z "${status}" ]]; then status=000; fi
+  if [[ "${status}" != "${expect}" && "${status}" != "201" ]]; then
+    echo "HTTP ${status} when calling $method $url" >&2
     echo "--- response body ---" >&2
     cat "${BODY}" >&2 || true
     echo "---------------------" >&2
