@@ -1,0 +1,44 @@
+name: E2E Staging (Finance + IoT HMAC)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  e2e-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run E2E FULL against Staging
+        env:
+          BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+          CONDOMINIO_MAQUINAS_ID: ${{ secrets.STAGING_CONDOMINIO_MAQUINAS_ID }}
+          POS_SERIAL: ${{ secrets.STAGING_POS_SERIAL }}
+          IDENTIFICADOR_LOCAL: ${{ secrets.STAGING_IDENTIFICADOR_LOCAL }}
+          GW_SERIAL: ${{ secrets.STAGING_GW_SERIAL }}
+          GATEWAY_ID: ${{ secrets.STAGING_GATEWAY_ID }}
+
+          SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+
+          IOT_HMAC_SECRET__GW_TESTE_001: ${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
+
+        run: node scripts/e2e-full.mjs
