@@ -1,10 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Load .env.local if present
+# Load .env.local if present (safe KEY=VALUE parser)
 if [[ -f .env.local ]]; then
-  # shellcheck disable=SC1091
-  set -a; source .env.local; set +a
+  while IFS= read -r line; do
+    # ignore empty lines and comments
+    [[ -z "$line" ]] && continue
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    # accept only KEY=VALUE
+    if [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+      key="${line%%=*}"
+      val="${line#*=}"
+      # trim spaces
+      key="$(echo "$key" | xargs)"
+      val="$(echo "$val" | xargs)"
+      # strip surrounding quotes
+      val="${val%\"}"; val="${val#\"}"
+      val="${val%\'}"; val="${val#\'}"
+      export "$key=$val"
+    fi
+  done < .env.local
 fi
 
 BASE_URL="${BASE_URL:-http://localhost:3000}"
