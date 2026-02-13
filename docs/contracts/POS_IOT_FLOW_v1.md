@@ -1,5 +1,38 @@
 # POS → Payments → IoT — Contract v1
 
+```mermaid
+sequenceDiagram
+  participant POS
+  participant API as Next API
+  participant DB as Supabase DB
+  participant GW as Easy Gateway
+
+  POS->>API: POST /api/pos/authorize
+  API->>DB: valida POS + maquina
+  API->>DB: cria/obtém pagamento (idempotency_key)
+  API-->>POS: 200 ok + pagamento_id + correlation_id
+
+  API->>API: POST /api/payments/confirm
+  API->>DB: dedupe provider_ref
+  API->>DB: marca pagamento PAGO
+  API-->>API: 200 ok
+
+  POS->>API: POST /api/payments/execute-cycle
+  API->>DB: cria/obtém ciclo
+  API->>DB: insere iot_commands (PULSE)
+  API-->>POS: 200 queued (cycle_id, command_id)
+
+  GW->>API: GET /api/iot/poll
+  API->>DB: seleciona comandos pendentes
+  API-->>GW: comando(s)
+
+  GW->>API: POST /api/iot/ack
+  API->>DB: marca comando ack/execução
+
+  GW->>API: POST /api/iot/evento
+  API->>DB: grava eventos_iot; atualiza ciclo se aplicável
+```
+
 Status: v1 (congelado)
 Escopo: somente documentação. Nenhuma mudança de runtime.
 
