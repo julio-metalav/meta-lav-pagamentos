@@ -103,6 +103,55 @@ RESP5=$(curl_json POST "$BASE_URL/api/iot/ack" "$ACK_BODY" 200)
 EV_BODY=$(jq -cn --arg type "cycle_started" --arg cmd "$CMD_ID" --arg ts "$NOW_TS" --arg mid "$IDENTIFICADOR_LOCAL" '{type:$type,cmd_id:$cmd,ts:$ts,machine_id:$mid,meta:{}}')
 RESP6=$(curl_json POST "$BASE_URL/api/iot/evento" "$EV_BODY" 200)
 
+# --- DB VALIDATION ---
+if [[ -z "${SUPABASE_URL:-}" || -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then
+  echo "ERROR: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required for DB validation" >&2
+  exit 10
+fi
+
+echo "Validating DB state..."
+REST_URL="$SUPABASE_URL/rest/v1"
+auth_hdr="apikey: $SUPABASE_SERVICE_ROLE_KEY"
+bearer_hdr="Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
+
+# 1) Check payment status
+PAY_DB=$(curl -sS \
+  -H "$auth_hdr" \
+  -H "$bearer_hdr" \
+  "$REST_URL/pagamentos?id=eq.$PAGAMENTO_ID&select=id,status")
+PAY_STATUS=$(echo "$PAY_DB" | jq -r '.[0].status // empty')
+if [[ "$PAY_STATUS" != "PAGO" ]]; then
+  echo "ERROR: pagamento status not PAGO (found: $PAY_STATUS)" >&2
+  exit 11
+fi
+
+# 2) Check cycle exists and linked
+CYCLE_DB=$(curl -sS \
+  -H "$auth_hdr" \
+  -H "$bearer_hdr" \
+  "$REST_URL/ciclos?id=eq.$CYCLE_ID&select=id,status")
+CYCLE_STATUS=$(echo "$CYCLE_DB" | jq -r '.[0].status // empty')
+if [[ -z "$CYCLE_STATUS" ]]; then
+  echo "ERROR: cycle not found in DB" >&2
+  exit 12
+fi
+
+# 3) Check IoT command status
+CMD_DB=$(curl -sS \
+  -H "$auth_hdr" \
+  -H "$bearer_hdr" \
+  "$REST_URL/iot_commands?id=eq.$CMD_ID&select=id,status")
+CMD_STATUS=$(echo "$CMD_DB" | jq -r '.[0].status // empty')
+if [[ -z "$CMD_STATUS" ]]; then
+  echo "ERROR: iot command not found in DB" >&2
+  exit 13
+fi
+
+echo "DB VALIDATION OK"
+echo "payment_status=$PAY_STATUS"
+echo "cycle_status=$CYCLE_STATUS"
+echo "command_status=$CMD_STATUS"
+
 # Summary
 echo "pagamento_id=$PAGAMENTO_ID"
 echo "cycle_id=$CYCLE_ID"
