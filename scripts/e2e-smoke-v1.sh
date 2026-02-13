@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # Load .env.local if present (safe KEY=VALUE parser)
+LOADED_ENV_KEYS=()
 if [[ -f .env.local ]]; then
   while IFS= read -r line; do
     # ignore empty lines and comments
@@ -18,8 +19,15 @@ if [[ -f .env.local ]]; then
       val="${val%\"}"; val="${val#\"}"
       val="${val%\'}"; val="${val#\'}"
       export "$key=$val"
+      LOADED_ENV_KEYS+=("$key")
     fi
   done < .env.local
+fi
+# Debug (safe): list names of vars parsed from .env.local (no values)
+if [[ ${#LOADED_ENV_KEYS[@]} -gt 0 ]]; then
+  echo "[env] loaded keys from .env.local: ${LOADED_ENV_KEYS[*]}" >&2
+else
+  echo "[env] no keys loaded from .env.local" >&2
 fi
 
 BASE_URL="${BASE_URL:-http://localhost:3000}"
