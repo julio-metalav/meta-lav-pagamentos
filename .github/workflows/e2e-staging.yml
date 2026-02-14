@@ -58,6 +58,27 @@ jobs:
           require CONDOMINIO_MAQUINAS_ID
           require GW_SERIAL
           require GATEWAY_ID
+          require STAGING_VERCEL_BYPASS_TOKEN
+
+      - name: Probe BASE_URL (detect SSO vs Deployment Protection)
+        shell: bash
+        run: |
+          set -e
+          . ./.env.local || true
+          url="${BASE_URL%/}/api/pos/machines"
+          echo "Probing: $url"
+          curl -sS -D headers.txt -o body.html "$url" || true
+          code=$(awk 'tolower($1)=="http/"{c=$2}END{print c}' headers.txt)
+          ctype=$(awk -F': ' 'tolower($1)=="content-type"{print $2}' headers.txt | head -n1)
+          echo "Probe status: ${code:-<none>}"
+          echo "Content-Type: ${ctype:-<none>}"
+          echo "Body (first 15 lines):"
+          head -n 15 body.html || true
+          if echo "${ctype}" | grep -qi 'text/html' && grep -qi -e 'Vercel Authentication' -e 'sso-api' body.html; then
+            echo "Conclusion: SSO (Vercel Authentication) is blocking. E2E cannot bypass SSO."
+            echo "Action: Disable Vercel Authentication for the staging alias used by E2E, or point STAGING_BASE_URL to an alias without SSO."
+            exit 1
+          fi
 
       - name: Run E2E FULL against Staging
         run: node scripts/e2e-full.mjs
