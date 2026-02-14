@@ -10,7 +10,6 @@ jobs:
   e2e-staging:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,18 +29,24 @@ jobs:
       - name: Write .env.local for CI
         run: |
           cat > .env.local << 'EOF'
-          BASE_URL=${{ secrets.STAGING_BASE_URL }}
-          CONDOMINIO_MAQUINAS_ID=${{ secrets.STAGING_CONDOMINIO_MAQUINAS_ID }}
-          POS_SERIAL=${{ secrets.STAGING_POS_SERIAL }}
-          IDENTIFICADOR_LOCAL=${{ secrets.STAGING_IDENTIFICADOR_LOCAL }}
-          GW_SERIAL=${{ secrets.STAGING_GW_SERIAL }}
-          GATEWAY_ID=${{ secrets.STAGING_GATEWAY_ID }}
-          SUPABASE_URL=${{ secrets.STAGING_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_URL=${{ secrets.STAGING_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY=${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-          IOT_HMAC_SECRET=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
-          IOT_HMAC_SECRET__GW_TESTE_001=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
-          EOF
+# CI generated
+BASE_URL=${{ secrets.STAGING_BASE_URL }}
+CONDOMINIO_MAQUINAS_ID=${{ secrets.STAGING_CONDOMINIO_MAQUINAS_ID }}
+POS_SERIAL=${{ secrets.STAGING_POS_SERIAL }}
+IDENTIFICADOR_LOCAL=${{ secrets.STAGING_IDENTIFICADOR_LOCAL }}
+GW_SERIAL=${{ secrets.STAGING_GW_SERIAL }}
+GATEWAY_ID=${{ secrets.STAGING_GATEWAY_ID }}
+SUPABASE_URL=${{ secrets.STAGING_SUPABASE_URL }}
+NEXT_PUBLIC_SUPABASE_URL=${{ secrets.STAGING_SUPABASE_URL }}
+SUPABASE_SERVICE_ROLE_KEY=${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+IOT_HMAC_SECRET=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
+IOT_HMAC_SECRET__GW_TESTE_001=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
+EOF
+
+      - name: Verify .env.local
+        run: |
+          test -f .env.local || (echo "missing .env.local" && exit 1)
+          echo ".env.local present" && wc -c .env.local
 
       - name: Run E2E FULL against Staging
         run: node scripts/e2e-full.mjs
