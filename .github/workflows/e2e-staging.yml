@@ -41,6 +41,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY=${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
           IOT_HMAC_SECRET=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
           IOT_HMAC_SECRET__GW_TESTE_001=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
+          INTERNAL_MANUAL_TOKEN=${{ secrets.INTERNAL_MANUAL_TOKEN }}
           EOF
 
       - name: Prefer CI BASE_URL if present (safe)
