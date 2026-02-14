@@ -44,6 +44,22 @@ jobs:
           STAGING_VERCEL_BYPASS_TOKEN=${{ secrets.STAGING_VERCEL_BYPASS_TOKEN }}
           EOF
 
+      - name: Show BASE_URL host (safe)
+        shell: bash
+        run: |
+          set -e
+          base=$(grep -E '^BASE_URL=' .env.local | head -n1 | cut -d= -f2-)
+          host=$(echo "$base" | sed -E 's#^https?://##' | cut -d/ -f1)
+          echo "BASE_URL_HOST=$host"
+
+      - name: Probe BASE_URL (safe)
+        shell: bash
+        run: |
+          set -e
+          base=$(grep -E '^BASE_URL=' .env.local | head -n1 | cut -d= -f2-)
+          echo "PROBE_HEAD ${base}/api/pos/authorize"
+          curl -sS -I "${base}/api/pos/authorize" | head -n 20
+
       - name: Verify .env.local
         run: |
           test -f .env.local || (echo "missing .env.local" && exit 1)
