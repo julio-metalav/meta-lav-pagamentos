@@ -28,20 +28,18 @@ jobs:
 
       - name: Write .env.local for CI
         run: |
-          cat > .env.local << 'EOF'
-# CI generated
-BASE_URL=${{ secrets.STAGING_BASE_URL }}
-CONDOMINIO_MAQUINAS_ID=${{ secrets.STAGING_CONDOMINIO_MAQUINAS_ID }}
-POS_SERIAL=${{ secrets.STAGING_POS_SERIAL }}
-IDENTIFICADOR_LOCAL=${{ secrets.STAGING_IDENTIFICADOR_LOCAL }}
-GW_SERIAL=${{ secrets.STAGING_GW_SERIAL }}
-GATEWAY_ID=${{ secrets.STAGING_GATEWAY_ID }}
-SUPABASE_URL=${{ secrets.STAGING_SUPABASE_URL }}
-NEXT_PUBLIC_SUPABASE_URL=${{ secrets.STAGING_SUPABASE_URL }}
-SUPABASE_SERVICE_ROLE_KEY=${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-IOT_HMAC_SECRET=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
-IOT_HMAC_SECRET__GW_TESTE_001=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
-EOF
+          echo "# CI generated" > .env.local
+          echo "BASE_URL=${{ secrets.STAGING_BASE_URL }}" >> .env.local
+          echo "CONDOMINIO_MAQUINAS_ID=${{ secrets.STAGING_CONDOMINIO_MAQUINAS_ID }}" >> .env.local
+          echo "POS_SERIAL=${{ secrets.STAGING_POS_SERIAL }}" >> .env.local
+          echo "IDENTIFICADOR_LOCAL=${{ secrets.STAGING_IDENTIFICADOR_LOCAL }}" >> .env.local
+          echo "GW_SERIAL=${{ secrets.STAGING_GW_SERIAL }}" >> .env.local
+          echo "GATEWAY_ID=${{ secrets.STAGING_GATEWAY_ID }}" >> .env.local
+          echo "SUPABASE_URL=${{ secrets.STAGING_SUPABASE_URL }}" >> .env.local
+          echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.STAGING_SUPABASE_URL }}" >> .env.local
+          echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}" >> .env.local
+          echo "IOT_HMAC_SECRET=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}" >> .env.local
+          echo "IOT_HMAC_SECRET__GW_TESTE_001=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}" >> .env.local
 
       - name: Verify .env.local
         run: |
