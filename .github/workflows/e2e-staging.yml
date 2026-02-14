@@ -78,14 +78,5 @@ jobs:
           require GW_SERIAL
           require GATEWAY_ID
 
-      - name: Probe BASE_URL (safe)
-        shell: bash
-        run: |
-          set -e
-          . ./.env.local || true
-          url="${BASE_URL%/}/api/pos/machines"
-          echo "PROBE_GET $url"
-          curl -sS -i "$url" | head -n 40
-
       - name: Run E2E FULL against Staging
         run: node scripts/e2e-full.mjs
