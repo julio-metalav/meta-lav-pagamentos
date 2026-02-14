@@ -44,12 +44,40 @@ const GW_ID = process.env.GATEWAY_ID || "";
 const serialNorm = GW_SERIAL.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
 const HMAC_SECRET = process.env[`IOT_HMAC_SECRET__${serialNorm}`] || process.env.IOT_HMAC_SECRET || "";
 
+// Optional: Vercel Protection Bypass (staging)
+const STAGING_VERCEL_BYPASS_TOKEN = process.env.STAGING_VERCEL_BYPASS_TOKEN || "";
+let VERCEL_BYPASS_COOKIE = "";
+
+async function ensureVercelBypassCookie() {
+  if (!STAGING_VERCEL_BYPASS_TOKEN || VERCEL_BYPASS_COOKIE) return;
+  try {
+    const url = `${BASE}?x-vercel-set-bypass-cookie=true&x-vercel-protection-bypass=${encodeURIComponent(STAGING_VERCEL_BYPASS_TOKEN)}`;
+    const res = await fetch(url, { method: "GET" });
+    // Try to read Set-Cookie
+    let raw = res.headers.get?.("set-cookie");
+    // undici also exposes getSetCookie()
+    if (!raw && typeof res.headers.getSetCookie === "function") {
+      const list = res.headers.getSetCookie();
+      raw = Array.isArray(list) && list.length ? list[0] : "";
+    }
+    if (raw) {
+      // keep only the first cookie name=value part (before first ';')
+      const nameValue = String(raw).split(";")[0].trim();
+      if (nameValue) VERCEL_BYPASS_COOKIE = nameValue;
+    }
+  } catch (e) {
+    // Silent best-effort; if it fails, regular flow will continue and likely 401
+  }
+}
+
 function sign(ts, bodyStr) {
   return crypto.createHmac("sha256", HMAC_SECRET).update(`${GW_SERIAL}.${ts}.${bodyStr}`).digest("hex");
 }
 
 async function callJson(path, method = "GET", bodyObj = undefined) {
+  await ensureVercelBypassCookie();
   const headers = { };
+  if (VERCEL_BYPASS_COOKIE) headers["cookie"] = VERCEL_BYPASS_COOKIE;
   if (bodyObj) headers["content-type"] = "application/json";
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -64,9 +92,11 @@ async function callJson(path, method = "GET", bodyObj = undefined) {
 
 async function callIoT(path, method = "GET", bodyObj = undefined) {
   if (!HMAC_SECRET) fail(`HMAC secret ausente para serial ${GW_SERIAL} (defina IOT_HMAC_SECRET__${serialNorm} ou IOT_HMAC_SECRET)`);
+  await ensureVercelBypassCookie();
   const ts = Math.floor(Date.now() / 1000).toString();
   const bodyStr = bodyObj ? JSON.stringify(bodyObj) : "";
   const headers = { "x-gw-serial": GW_SERIAL, "x-gw-ts": ts, "x-gw-sign": sign(ts, bodyStr) };
+  if (VERCEL_BYPASS_COOKIE) headers["cookie"] = VERCEL_BYPASS_COOKIE;
   if (bodyObj) headers["content-type"] = "application/json";
   const res = await fetch(`${BASE}${path}`, { method, headers, body: bodyObj ? bodyStr : undefined });
   const text = await res.text();
