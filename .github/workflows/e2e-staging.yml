@@ -44,6 +44,18 @@ jobs:
           STAGING_VERCEL_BYPASS_TOKEN=${{ secrets.STAGING_VERCEL_BYPASS_TOKEN }}
           EOF
 
+      - name: Prefer CI BASE_URL if present (safe)
+        shell: bash
+        run: |
+          set -e
+          ci="${{ secrets.STAGING_CI_BASE_URL }}"
+          if [ -n "$ci" ]; then
+            sed -i -E "s|^BASE_URL=.*|BASE_URL=$ci|g" .env.local
+            echo "Using CI BASE_URL"
+          else
+            echo "Using default STAGING_BASE_URL"
+          fi
+
       - name: Show BASE_URL host (safe)
         shell: bash
         run: |
