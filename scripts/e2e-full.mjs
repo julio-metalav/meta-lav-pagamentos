@@ -46,15 +46,39 @@ const HMAC_SECRET = process.env[`IOT_HMAC_SECRET__${serialNorm}`] || process.env
 
 // Optional: Vercel Protection Bypass (staging)
 const STAGING_VERCEL_BYPASS_TOKEN = process.env.STAGING_VERCEL_BYPASS_TOKEN || "";
+const MANUAL_CONFIRM = process.env.MANUAL_CONFIRM === "1";
+const INTERNAL_MANUAL_TOKEN = process.env.INTERNAL_MANUAL_TOKEN || process.env.MANUAL_INTERNAL_TOKEN || "";
+const MANUAL_METODO = (process.env.MANUAL_METODO || "STONE_OFFLINE").toUpperCase();
+const MANUAL_REF_PREFIX = process.env.MANUAL_REF_PREFIX || "manual-ci";
+
+const SUPABASE_URL_RAW = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SUPABASE_URL = SUPABASE_URL_RAW.replace(/\/+$/, "");
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  fail("Env SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são obrigatórios para o E2E");
+}
+
+const SUPABASE_REST_URL = `${SUPABASE_URL}/rest/v1`;
+const SUPABASE_HEADERS = {
+  apikey: SUPABASE_SERVICE_ROLE_KEY,
+  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+  "Content-Type": "application/json",
+  Prefer: "return=representation",
+};
+
+const WAIT_RETRIES = Number(process.env.E2E_SUPABASE_RETRIES || 15);
+const WAIT_DELAY_MS = Number(process.env.E2E_SUPABASE_DELAY_MS || 1000);
+
 
 function sign(ts, bodyStr) {
   return crypto.createHmac("sha256", HMAC_SECRET).update(`${GW_SERIAL}.${ts}.${bodyStr}`).digest("hex");
 }
 
-async function callJson(path, method = "GET", bodyObj = undefined) {
-  const headers = { };
+async function callJson(path, method = "GET", bodyObj = undefined, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
   if (STAGING_VERCEL_BYPASS_TOKEN) headers["x-vercel-protection-bypass"] = STAGING_VERCEL_BYPASS_TOKEN;
-  if (bodyObj) headers["content-type"] = "application/json";
+  if (bodyObj && !headers["content-type"]) headers["content-type"] = "application/json";
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
@@ -80,7 +104,124 @@ async function callIoT(path, method = "GET", bodyObj = undefined) {
   return { status: res.status, text, json };
 }
 
+
+async function supabaseSelect(table, params = {}, { single = false } = {}) {
+  const base = SUPABASE_REST_URL;
+  const url = new URL(`${base.replace(/\/+$/, "")}/${table}`);
+  const entries = params || {};
+  for (const [key, value] of Object.entries(entries)) {
+    if (value === undefined || value === null) continue;
+    url.searchParams.set(key, value);
+  }
+  if (!url.searchParams.has("select")) url.searchParams.set("select", "*");
+  const res = await fetch(url, { headers: SUPABASE_HEADERS });
+  const text = await res.text();
+  if (!res.ok) fail(`[supabase ${table}] ${res.status} ${text}`);
+  const data = text ? JSON.parse(text) : [];
+  if (single) {
+    if (Array.isArray(data)) return data[0] ?? null;
+    return data;
+  }
+  return data;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForCondition(label, fn, opts = {}) {
+  const retries = opts.retries ?? WAIT_RETRIES;
+  const delayMs = opts.delayMs ?? WAIT_DELAY_MS;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const ok = await fn();
+    if (ok) return;
+    if (attempt < retries) await sleep(delayMs);
+  }
+  fail(`${label} não atingiu o estado esperado após ${retries} tentativas`);
+}
+
+async function expectIotCommandStatus(cmdId, expectedStatuses, opts = {}) {
+  const allow = (Array.isArray(expectedStatuses) ? expectedStatuses : [expectedStatuses]).map((s) => String(s).toUpperCase());
+  await waitForCondition(`iot_commands:${cmdId}:${allow.join("|")}`, async () => {
+    const row = await supabaseSelect(
+      "iot_commands",
+      { select: "cmd_id,status,ack_at", cmd_id: `eq.${cmdId}` },
+      { single: true }
+    );
+    if (!row) return false;
+    const current = String(row.status || "").toUpperCase();
+    if (!allow.includes(current)) return false;
+    if (opts.requireAckAt && !row.ack_at) return false;
+    return true;
+  }, opts);
+}
+
+async function expectCycleStatus(cycleId, expectedStatus, opts = {}) {
+  const target = String(expectedStatus).toUpperCase();
+  const guards = {
+    LIBERADO: (row) => !!row.pulso_enviado_at,
+    EM_USO: (row) => !!row.busy_on_at,
+    FINALIZADO: (row) => !!row.busy_off_at,
+  };
+  await waitForCondition(`ciclos:${cycleId}:${target}`, async () => {
+    const row = await supabaseSelect(
+      "ciclos",
+      { select: "id,status,pulso_enviado_at,busy_on_at,busy_off_at", id: `eq.${cycleId}` },
+      { single: true }
+    );
+    if (!row) return false;
+    const current = String(row.status || "").toUpperCase();
+    if (current !== target) return false;
+    const guard = guards[target];
+    if (guard && !guard(row)) return false;
+    return true;
+  }, opts);
+}
+
+
+
+function randomRef() {
+  return `${MANUAL_REF_PREFIX}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+}
+
+async function callManualConfirmFlow() {
+  if (!CONDOMINIO_MAQUINAS_ID) fail("Env CONDOMINIO_MAQUINAS_ID é obrigatório");
+  if (!INTERNAL_MANUAL_TOKEN) fail("INTERNAL_MANUAL_TOKEN obrigatório para MANUAL_CONFIRM=1");
+
+  const ref_externa = randomRef();
+  console.log("
+[manual.confirm] calling /api/manual/confirm ...");
+  const resp = await callJson(
+    "/api/manual/confirm",
+    "POST",
+    {
+      pos_serial: POS_SERIAL,
+      condominio_maquinas_id: CONDOMINIO_MAQUINAS_ID,
+      valor_centavos: VALOR_CENTAVOS,
+      metodo: MANUAL_METODO,
+      identificador_local: IDENTIFICADOR_LOCAL,
+      ref_externa,
+      observacao: "E2E manual confirm",
+    },
+    { headers: { "x-internal-token": INTERNAL_MANUAL_TOKEN } }
+  );
+  console.log("[manual.confirm] status=", resp.status, resp.text);
+  if (resp.status < 200 || resp.status >= 300 || !resp.json?.pagamento_id) fail("manual/confirm falhou", resp.text);
+  const cycle_id = String(resp.json.cycle_id || "");
+  const command_id = String(resp.json.command_id || "");
+  if (!cycle_id) fail("manual/confirm não retornou cycle_id", resp.text);
+  if (!command_id) fail("manual/confirm não retornou command_id", resp.text);
+  return {
+    pagamento_id: String(resp.json.pagamento_id),
+    cycle_id,
+    command_id,
+  };
+}
+
 async function callFinancial() {
+  if (MANUAL_CONFIRM) {
+    return callManualConfirmFlow();
+  }
   if (!CONDOMINIO_MAQUINAS_ID) fail("Env CONDOMINIO_MAQUINAS_ID é obrigatório");
   // 1) authorize
   console.log("\n[authorize] calling /api/pos/authorize...");
@@ -119,11 +260,12 @@ async function callFinancial() {
   console.log("[execute-cycle] status=", exec.status, exec.text);
   if (exec.status < 200 || exec.status >= 300 || !exec.json?.command_id) fail("execute-cycle falhou", exec.text);
 
-  return {
-    pagamento_id,
-    cycle_id: String(exec.json.cycle_id || ""),
-    command_id: String(exec.json.command_id || ""),
-  };
+  const cycle_id = String(exec.json?.cycle_id || "");
+  const command_id = String(exec.json?.command_id || "");
+  if (!cycle_id) fail("execute-cycle não retornou cycle_id", exec.text);
+  if (!command_id) fail("execute-cycle não retornou command_id", exec.text);
+
+  return { pagamento_id, cycle_id, command_id };
 }
 
 async function main() {
@@ -131,6 +273,7 @@ async function main() {
   console.log(`[env] POS_SERIAL=${POS_SERIAL} IDENTIFICADOR_LOCAL=${IDENTIFICADOR_LOCAL} VALOR_CENTAVOS=${VALOR_CENTAVOS} METODO=${METODO}`);
   console.log(`[env] CONDOMINIO_MAQUINAS_ID=${CONDOMINIO_MAQUINAS_ID}`);
   console.log(`[env] GW_SERIAL=${GW_SERIAL} GATEWAY_ID=${GW_ID}`);
+  if (MANUAL_CONFIRM) console.log(`[mode] MANUAL_CONFIRM=1 (metodo=${MANUAL_METODO})`);
 
   const fin = await callFinancial();
   console.log("\n[financial OK]", fin);
@@ -150,6 +293,8 @@ async function main() {
     cmd_id = c0?.cmd_id || c0?.id || c0?.command_id || "";
   }
   if (!cmd_id) fail("nenhum cmd_id encontrado no poll nem do execute-cycle", JSON.stringify(poll.json));
+  await expectIotCommandStatus(cmd_id, "ENVIADO");
+
 
   // 5) ack (HMAC)
   console.log("\n[ack] calling /api/iot/ack (HMAC)...");
@@ -158,11 +303,30 @@ async function main() {
   console.log("[ack] status=", ack.status, ack.text);
   if (ack.status < 200 || ack.status >= 300) fail("ack falhou", ack.text);
 
-  // 6) evento (HMAC)
-  console.log("\n[evento] calling /api/iot/evento (HMAC)...");
-  const ev = await callIoT("/api/iot/evento", "POST", { ts: nowTs, machine_id: IDENTIFICADOR_LOCAL, type: "PULSE" });
-  console.log("[evento] status=", ev.status, ev.text);
-  if (ev.status < 200 || ev.status >= 300) fail("evento falhou", ev.text);
+  await expectIotCommandStatus(cmd_id, "ACK", { requireAckAt: true });
+
+  // 6) eventos (HMAC)
+  console.log("\n[evento] calling /api/iot/evento (PULSE)...");
+  const pulseTs = Math.floor(Date.now() / 1000);
+  const pulse = await callIoT("/api/iot/evento", "POST", { ts: pulseTs, machine_id: IDENTIFICADOR_LOCAL, cmd_id, type: "PULSE", pulses: 1 });
+  console.log("[evento:PULSE] status=", pulse.status, pulse.text);
+  if (pulse.status < 200 || pulse.status >= 300) fail("evento PULSE falhou", pulse.text);
+  await expectIotCommandStatus(cmd_id, "EXECUTADO");
+  await expectCycleStatus(fin.cycle_id, "LIBERADO");
+
+  console.log("\n[evento] calling /api/iot/evento (BUSY_ON)...");
+  const busyOnTs = Math.floor(Date.now() / 1000);
+  const busyOn = await callIoT("/api/iot/evento", "POST", { ts: busyOnTs, machine_id: IDENTIFICADOR_LOCAL, type: "BUSY_ON" });
+  console.log("[evento:BUSY_ON] status=", busyOn.status, busyOn.text);
+  if (busyOn.status < 200 || busyOn.status >= 300) fail("evento BUSY_ON falhou", busyOn.text);
+  await expectCycleStatus(fin.cycle_id, "EM_USO");
+
+  console.log("\n[evento] calling /api/iot/evento (BUSY_OFF)...");
+  const busyOffTs = Math.floor(Date.now() / 1000);
+  const busyOff = await callIoT("/api/iot/evento", "POST", { ts: busyOffTs, machine_id: IDENTIFICADOR_LOCAL, type: "BUSY_OFF" });
+  console.log("[evento:BUSY_OFF] status=", busyOff.status, busyOff.text);
+  if (busyOff.status < 200 || busyOff.status >= 300) fail("evento BUSY_OFF falhou", busyOff.text);
+  await expectCycleStatus(fin.cycle_id, "FINALIZADO");
 
   console.log("\n✅ E2E FULL OK", { pagamento_id: fin.pagamento_id, cycle_id: fin.cycle_id, command_id: cmd_id });
 }
