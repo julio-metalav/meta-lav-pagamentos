@@ -1,4 +1,4 @@
-name: E2E Staging (Finance + IoT HMAC)
+name: E2E Staging V2 (Finance + IoT HMAC)
 
 on:
   push:
