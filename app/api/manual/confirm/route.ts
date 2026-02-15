@@ -160,7 +160,7 @@ export async function POST(req: Request) {
         maquina_id: machine.id,
         origem: "MANUAL",
         metodo,
-        gateway_pagamento: gatewayFromMetodo(metodo),
+        gateway_pagamento: "STONE",
         valor_centavos,
         status: "PAGO",
         paid_at: paidAtIso,
