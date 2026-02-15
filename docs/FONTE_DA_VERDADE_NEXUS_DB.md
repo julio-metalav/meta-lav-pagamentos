@@ -101,8 +101,8 @@ condominio_maquinas --1:1--> gateways | pos_devices | precos_ciclo
 - Link IoT: `iot_commands.cmd_id = eventos_iot.payload->>'cmd_id'`
 - Link preço: `condominio_maquinas.id = precos_ciclo.maquina_id`
 
-## Tabela Legado (read-only)
-- `iot_events` (EN): apenas para migrações e comparativos. Qualquer uso runtime precisa ser explicitamente marcado como `read_only` no dashboard e nunca escrever.
+## Legado removido
+- `iot_events` (EN): tabela desativada/removida do Supabase. Se precisar analisar dados históricos, use dumps anteriores ou exports dedicados — não existe mais referência ativa no runtime.
 
 ## Queries de Referência
 

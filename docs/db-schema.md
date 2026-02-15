@@ -166,29 +166,6 @@ limit 50;
 
 ---
 
-## iot_events
-- **table:** `iot_events`
-- **canonical/runtime:** ❌ / ❌
-- **read_only:** ✅
-- **purpose:** LEGADO (EN). Não usar no runtime. Logs antigos/compatibilidade.
-
-### Colunas
-| coluna | tipo | required |
-|---|---|---|
-| `id` | `bigint` | ✅ |
-| `serial` | `text` | ✅ |
-| `machine_id` | `text` | ✅ |
-| `event_id` | `text` | ✅ |
-| `type` | `text` | ✅ |
-| `payload` | `jsonb` | ✅ |
-| `created_at` | `timestamptz` | ✅ |
-
-### Regras
-- NÃO USAR no runtime
-- Somente leitura/migração
-
----
-
 ## iot_eventos
 - **table:** `iot_eventos`
 - **canonical/runtime:** ❌ / ✅
