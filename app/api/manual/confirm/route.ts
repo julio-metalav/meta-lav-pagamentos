@@ -158,7 +158,7 @@ export async function POST(req: Request) {
       const insertPayload: Record<string, unknown> = {
         condominio_id: machine.condominio_id,
         maquina_id: machine.id,
-        origem: "MANUAL",
+        origem: "POS",
         metodo,
         gateway_pagamento: "STONE",
         valor_centavos,
