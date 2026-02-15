@@ -189,8 +189,7 @@ async function callManualConfirmFlow() {
   if (!INTERNAL_MANUAL_TOKEN) fail("INTERNAL_MANUAL_TOKEN obrigatório para MANUAL_CONFIRM=1");
 
   const ref_externa = randomRef();
-  console.log("
-[manual.confirm] calling /api/manual/confirm ...");
+  console.log("\n[manual.confirm] calling /api/manual/confirm ...");
   const resp = await callJson(
     "/api/manual/confirm",
     "POST",
