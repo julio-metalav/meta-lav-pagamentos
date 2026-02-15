@@ -10,8 +10,8 @@
 -- 4. Garantir que apenas roles de leitura (service_role/read_only_api) tenham EXECUTE.
 
 create or replace function public.nexus_db_schema_snapshot(
-    target_schema text default 'public',
-    target_tables text[] default null
+    target_schema text,
+    target_tables text[]
 ) returns table (
     table_name text,
     column_name text,

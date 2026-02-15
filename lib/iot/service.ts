@@ -205,7 +205,7 @@ export async function ackCommand(input: AckInput): Promise<AckOk | AckErr> {
 
     const admin = supabaseAdmin() as any;
     const nowIso = new Date().toISOString();
-    const createdAtIso = new Date(ts * 1000).toISOString();
+    const ackAtIso = new Date(ts * 1000).toISOString();
 
     // Carrega gateway por serial
     const { data: gw, error: gwErr } = await admin
@@ -228,28 +228,12 @@ export async function ackCommand(input: AckInput): Promise<AckOk | AckErr> {
     if (cmdErr) return bad("db_error", 500, { detail: cmdErr.message });
     if (!cmdRow) return bad("cmd_not_found", 404);
 
-    const cmdTipo = String(cmdRow.tipo ?? "UNKNOWN");
-
-    // Log ACK
-    const { error: ackErr } = await admin.from("iot_acks").insert({
-      serial,
-      machine_id: machineId,
-      cmd_id: cmdId,
-      cmd: cmdTipo,
-      ok,
-      code: code ?? null,
-      payload: data,
-      created_at: createdAtIso,
-    });
-
-    if (ackErr) return bad("db_error", 500, { detail: ackErr.message });
-
     // Atualiza comando
     const newStatus: "ACK" | "FALHOU" = ok ? "ACK" : "FALHOU";
 
     const { error: upErr } = await admin
       .from("iot_commands")
-      .update({ status: newStatus, ack_at: nowIso })
+      .update({ status: newStatus, ack_at: ackAtIso })
       .eq("id", cmdRow.id)
       .eq("gateway_id", gw.id);
 
@@ -495,10 +479,6 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
     if (!Number.isFinite(pulses) || pulses <= 0) {
       return { status: 400, body: { ok: false, error: "invalid_pulses", evento_id: evPt.id } };
     }
-
-    const rows = Array.from({ length: pulses }, () => ({ gw_serial: serial, ts_gw: tsGw, ciclos: 1, origem: "PULSE", evento_id: evLegacy.id }));
-    const { error: cErr } = await admin.from("iot_ciclos").insert(rows);
-    if (cErr) return { status: 500, body: { ok: false, error: "db_error", detail: cErr.message, evento_id: evPt.id } };
 
     if (cmdRow?.id) {
       const currStatus = String(cmdRow.status ?? "");

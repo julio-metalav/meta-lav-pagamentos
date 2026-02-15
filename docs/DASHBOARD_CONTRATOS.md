@@ -4,6 +4,19 @@ Todas as telas leem a fonte única em PT-BR (`pagamentos`, `ciclos`, `iot_comman
 
 ---
 
+## Dashboard 0 — Diagnóstico instantâneo
+- **Objetivo**: calcular status de cada `iot_command` em tempo real com base nos eventos correlacionados.
+- **Regra de correlação**: parar de usar janela temporal; sempre pegar o `cmd_id` direto de `eventos_iot.payload->>'cmd_id'` e fazer join 1:1 com `iot_commands.cmd_id`.
+- **Status possíveis**:
+  - **OK**: `busy_off_at IS NOT NULL`.
+  - **LATENCIA**: `ack_at > expires_at` **e** `busy_on_at IS NOT NULL` (ou existe evento `BUSY_ON`).
+  - **FALHA**: `ack_at IS NULL` **e** `expires_at < now()` **e** `busy_on_at IS NULL` (e nenhum evento `BUSY_ON`).
+- **Regras adicionais**:
+  - Se existe `busy_on_at` **ou** evento `BUSY_ON`, nunca marcar como falha, mesmo que `ack_at > expires_at`.
+  - O diagnóstico deve olhar `eventos_iot` para confirmar `BUSY_ON`/`BUSY_OFF` usando `cmd_id` no payload.
+
+---
+
 ## Dashboard 1 — Receita Bruta e Conversão
 - **Objetivo**: dar visão diária/semanal de volume financeiro por condomínio / método / gateway de pagamento.
 - **KPIs**:

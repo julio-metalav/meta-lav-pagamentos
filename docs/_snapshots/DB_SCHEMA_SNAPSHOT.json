@@ -1,23 +1,22 @@
 {
   "metadata": {
-    "generated_at": "2026-02-15T13:45:04.927Z",
     "schema": "public",
     "tables": [
-      "pagamentos",
       "ciclos",
-      "iot_commands",
+      "condominio_maquinas",
       "eventos_iot",
       "gateways",
+      "iot_commands",
+      "pagamentos",
       "pos_devices",
-      "condominio_maquinas",
       "precos_ciclo"
     ],
-    "source": "meta_columns",
+    "source": "rpc",
     "safe_mode": true,
     "git": {
       "branch": "test/e2e-full-runner",
-      "commit": "6e8d6b3722e0567e6c7d3224502bd39a3c22dfe7",
-      "shortCommit": "6e8d6b3"
+      "commit": "356279953002ad1cf1c7647c43faa46a9630ee48",
+      "shortCommit": "3562799"
     },
     "environments": [
       "https://ci.metalav.com.br",
@@ -27,73 +26,13 @@
   "tables": {
     "ciclos": [
       {
-        "name": "busy_off_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "busy_on_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "condominio_id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "created_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "eta_livre_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
         "name": "id",
         "dataType": "uuid",
         "pgType": "uuid",
         "isNullable": false,
-        "defaultValue": null,
+        "defaultValue": "gen_random_uuid()",
         "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "maquina_id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 1,
         "enumValues": null
       },
       {
@@ -103,17 +42,73 @@
         "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 2,
         "enumValues": null
       },
       {
-        "name": "pulso_confirmado",
-        "dataType": "boolean",
-        "pgType": "bool",
+        "name": "condominio_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
         "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 3,
+        "enumValues": null
+      },
+      {
+        "name": "maquina_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 4,
+        "enumValues": null
+      },
+      {
+        "name": "status",
+        "dataType": "USER-DEFINED",
+        "pgType": "ciclo_status",
+        "isNullable": false,
+        "defaultValue": "'AGUARDANDO_LIBERACAO'::ciclo_status",
+        "isIdentity": false,
+        "ordinal": 5,
+        "enumValues": [
+          "ABORTADO",
+          "AGUARDANDO_LIBERACAO",
+          "EM_USO",
+          "FINALIZADO",
+          "LIBERADO"
+        ]
+      },
+      {
+        "name": "busy_on_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 6,
+        "enumValues": null
+      },
+      {
+        "name": "busy_off_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 7,
+        "enumValues": null
+      },
+      {
+        "name": "eta_livre_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 8,
         "enumValues": null
       },
       {
@@ -123,55 +118,49 @@
         "isNullable": true,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 9,
         "enumValues": null
       },
       {
-        "name": "status",
-        "dataType": "USER-DEFINED",
-        "pgType": "ciclo_status",
+        "name": "pulso_confirmado",
+        "dataType": "boolean",
+        "pgType": "bool",
         "isNullable": false,
-        "defaultValue": null,
+        "defaultValue": "false",
         "isIdentity": false,
-        "ordinal": null,
-        "enumValues": [
-          "AGUARDANDO_LIBERACAO",
-          "LIBERADO",
-          "EM_USO",
-          "FINALIZADO",
-          "ABORTADO"
-        ]
+        "ordinal": 10,
+        "enumValues": null
+      },
+      {
+        "name": "created_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": false,
+        "defaultValue": "now()",
+        "isIdentity": false,
+        "ordinal": 11,
+        "enumValues": null
       },
       {
         "name": "updated_at",
         "dataType": "timestamp with time zone",
         "pgType": "timestamptz",
         "isNullable": false,
-        "defaultValue": null,
+        "defaultValue": "now()",
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 12,
         "enumValues": null
       }
     ],
     "condominio_maquinas": [
       {
-        "name": "ativa",
-        "dataType": "boolean",
-        "pgType": "bool",
+        "name": "id",
+        "dataType": "uuid",
+        "pgType": "uuid",
         "isNullable": false,
-        "defaultValue": null,
+        "defaultValue": "gen_random_uuid()",
         "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "buffer_retirada_min",
-        "dataType": "integer",
-        "pgType": "int4",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 1,
         "enumValues": null
       },
       {
@@ -181,67 +170,7 @@
         "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "created_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "duracao_ciclo_min",
-        "dataType": "integer",
-        "pgType": "int4",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "gateway_id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "identificador_local",
-        "dataType": "text",
-        "pgType": "text",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "pos_device_id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 2,
         "enumValues": null
       },
       {
@@ -251,32 +180,102 @@
         "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 3,
         "enumValues": [
           "lavadora",
           "secadora"
         ]
       },
       {
-        "name": "updated_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
+        "name": "identificador_local",
+        "dataType": "text",
+        "pgType": "text",
         "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 4,
         "enumValues": null
-      }
-    ],
-    "eventos_iot": [
+      },
+      {
+        "name": "ativa",
+        "dataType": "boolean",
+        "pgType": "bool",
+        "isNullable": false,
+        "defaultValue": "true",
+        "isIdentity": false,
+        "ordinal": 5,
+        "enumValues": null
+      },
+      {
+        "name": "duracao_ciclo_min",
+        "dataType": "integer",
+        "pgType": "int4",
+        "isNullable": false,
+        "defaultValue": "35",
+        "isIdentity": false,
+        "ordinal": 6,
+        "enumValues": null
+      },
+      {
+        "name": "buffer_retirada_min",
+        "dataType": "integer",
+        "pgType": "int4",
+        "isNullable": false,
+        "defaultValue": "5",
+        "isIdentity": false,
+        "ordinal": 7,
+        "enumValues": null
+      },
+      {
+        "name": "gateway_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 8,
+        "enumValues": null
+      },
+      {
+        "name": "pos_device_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 9,
+        "enumValues": null
+      },
       {
         "name": "created_at",
         "dataType": "timestamp with time zone",
         "pgType": "timestamptz",
         "isNullable": false,
-        "defaultValue": null,
+        "defaultValue": "now()",
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 10,
+        "enumValues": null
+      },
+      {
+        "name": "updated_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": false,
+        "defaultValue": "now()",
+        "isIdentity": false,
+        "ordinal": 11,
+        "enumValues": null
+      }
+    ],
+    "eventos_iot": [
+      {
+        "name": "id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": false,
+        "defaultValue": "gen_random_uuid()",
+        "isIdentity": false,
+        "ordinal": 1,
         "enumValues": null
       },
       {
@@ -286,17 +285,7 @@
         "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 2,
         "enumValues": null
       },
       {
@@ -306,17 +295,7 @@
         "isNullable": true,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "payload",
-        "dataType": "jsonb",
-        "pgType": "jsonb",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 3,
         "enumValues": null
       },
       {
@@ -326,25 +305,45 @@
         "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 4,
         "enumValues": [
-          "BUSY_ON",
           "BUSY_OFF",
-          "PULSO_ENVIADO",
+          "BUSY_ON",
+          "ERRO",
           "HEARTBEAT",
-          "ERRO"
+          "PULSO_ENVIADO"
         ]
+      },
+      {
+        "name": "payload",
+        "dataType": "jsonb",
+        "pgType": "jsonb",
+        "isNullable": false,
+        "defaultValue": "'{}'::jsonb",
+        "isIdentity": false,
+        "ordinal": 5,
+        "enumValues": null
+      },
+      {
+        "name": "created_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": false,
+        "defaultValue": "now()",
+        "isIdentity": false,
+        "ordinal": 6,
+        "enumValues": null
       }
     ],
     "gateways": [
       {
-        "name": "busy",
-        "dataType": "boolean",
-        "pgType": "bool",
+        "name": "id",
+        "dataType": "uuid",
+        "pgType": "uuid",
         "isNullable": false,
-        "defaultValue": null,
+        "defaultValue": "gen_random_uuid()",
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 1,
         "enumValues": null
       },
       {
@@ -354,87 +353,17 @@
         "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 2,
         "enumValues": null
       },
       {
-        "name": "condominium_id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "created_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
+        "name": "serial",
+        "dataType": "text",
+        "pgType": "text",
         "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "firmware_version",
-        "dataType": "text",
-        "pgType": "text",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "fw_version",
-        "dataType": "text",
-        "pgType": "text",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "ip_local",
-        "dataType": "text",
-        "pgType": "text",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "last_seen_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "last_status_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 3,
         "enumValues": null
       },
       {
@@ -444,329 +373,17 @@
         "isNullable": true,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 4,
         "enumValues": null
       },
       {
-        "name": "rssi",
-        "dataType": "integer",
-        "pgType": "int4",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "serial",
-        "dataType": "text",
-        "pgType": "text",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "token",
+        "name": "fw_version",
         "dataType": "text",
         "pgType": "text",
         "isNullable": true,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "updated_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      }
-    ],
-    "iot_commands": [
-      {
-        "name": "ack_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "cmd_id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "condominio_maquinas_id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "created_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "expires_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "gateway_id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "payload",
-        "dataType": "jsonb",
-        "pgType": "jsonb",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "status",
-        "dataType": "text",
-        "pgType": "text",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "tipo",
-        "dataType": "text",
-        "pgType": "text",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      }
-    ],
-    "pagamentos": [
-      {
-        "name": "condominio_id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "created_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "external_id",
-        "dataType": "text",
-        "pgType": "text",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "gateway_pagamento",
-        "dataType": "USER-DEFINED",
-        "pgType": "pag_gateway",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": [
-          "ASAAS",
-          "STONE"
-        ]
-      },
-      {
-        "name": "id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "idempotency_key",
-        "dataType": "text",
-        "pgType": "text",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "maquina_id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "metodo",
-        "dataType": "USER-DEFINED",
-        "pgType": "pag_metodo",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": [
-          "PIX",
-          "CARTAO"
-        ]
-      },
-      {
-        "name": "origem",
-        "dataType": "USER-DEFINED",
-        "pgType": "pag_origem",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": [
-          "POS",
-          "APP"
-        ]
-      },
-      {
-        "name": "paid_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "status",
-        "dataType": "USER-DEFINED",
-        "pgType": "pag_status",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": [
-          "CRIADO",
-          "PAGO",
-          "CANCELADO",
-          "ESTORNADO",
-          "EXPIRADO",
-          "FALHOU"
-        ]
-      },
-      {
-        "name": "valor_centavos",
-        "dataType": "integer",
-        "pgType": "int4",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      }
-    ],
-    "pos_devices": [
-      {
-        "name": "app_version",
-        "dataType": "text",
-        "pgType": "text",
-        "isNullable": true,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "condominio_id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "created_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "id",
-        "dataType": "uuid",
-        "pgType": "uuid",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 5,
         "enumValues": null
       },
       {
@@ -776,27 +393,27 @@
         "isNullable": true,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 6,
         "enumValues": null
       },
       {
-        "name": "serial",
-        "dataType": "text",
-        "pgType": "text",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
-      {
-        "name": "stone_merchant_id",
+        "name": "ip_local",
         "dataType": "text",
         "pgType": "text",
         "isNullable": true,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 7,
+        "enumValues": null
+      },
+      {
+        "name": "created_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": false,
+        "defaultValue": "now()",
+        "isIdentity": false,
+        "ordinal": 8,
         "enumValues": null
       },
       {
@@ -804,31 +421,193 @@
         "dataType": "timestamp with time zone",
         "pgType": "timestamptz",
         "isNullable": false,
+        "defaultValue": "now()",
+        "isIdentity": false,
+        "ordinal": 9,
+        "enumValues": null
+      },
+      {
+        "name": "token",
+        "dataType": "text",
+        "pgType": "text",
+        "isNullable": true,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 10,
+        "enumValues": null
+      },
+      {
+        "name": "busy",
+        "dataType": "boolean",
+        "pgType": "bool",
+        "isNullable": false,
+        "defaultValue": "false",
+        "isIdentity": false,
+        "ordinal": 11,
+        "enumValues": null
+      },
+      {
+        "name": "last_status_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 12,
+        "enumValues": null
+      },
+      {
+        "name": "firmware_version",
+        "dataType": "text",
+        "pgType": "text",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 13,
+        "enumValues": null
+      },
+      {
+        "name": "rssi",
+        "dataType": "integer",
+        "pgType": "int4",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 14,
+        "enumValues": null
+      },
+      {
+        "name": "condominium_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 15,
         "enumValues": null
       }
     ],
-    "precos_ciclo": [
-      {
-        "name": "created_at",
-        "dataType": "timestamp with time zone",
-        "pgType": "timestamptz",
-        "isNullable": false,
-        "defaultValue": null,
-        "isIdentity": false,
-        "ordinal": null,
-        "enumValues": null
-      },
+    "iot_commands": [
       {
         "name": "id",
         "dataType": "uuid",
         "pgType": "uuid",
         "isNullable": false,
+        "defaultValue": "gen_random_uuid()",
+        "isIdentity": false,
+        "ordinal": 1,
+        "enumValues": null
+      },
+      {
+        "name": "gateway_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 2,
+        "enumValues": null
+      },
+      {
+        "name": "condominio_maquinas_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 3,
+        "enumValues": null
+      },
+      {
+        "name": "cmd_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 4,
+        "enumValues": null
+      },
+      {
+        "name": "tipo",
+        "dataType": "text",
+        "pgType": "text",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 5,
+        "enumValues": null
+      },
+      {
+        "name": "payload",
+        "dataType": "jsonb",
+        "pgType": "jsonb",
+        "isNullable": false,
+        "defaultValue": "'{}'::jsonb",
+        "isIdentity": false,
+        "ordinal": 6,
+        "enumValues": null
+      },
+      {
+        "name": "status",
+        "dataType": "text",
+        "pgType": "text",
+        "isNullable": false,
+        "defaultValue": "'PENDENTE'::text",
+        "isIdentity": false,
+        "ordinal": 7,
+        "enumValues": null
+      },
+      {
+        "name": "expires_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 8,
+        "enumValues": null
+      },
+      {
+        "name": "created_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": false,
+        "defaultValue": "now()",
+        "isIdentity": false,
+        "ordinal": 9,
+        "enumValues": null
+      },
+      {
+        "name": "ack_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 10,
+        "enumValues": null
+      }
+    ],
+    "pagamentos": [
+      {
+        "name": "id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": false,
+        "defaultValue": "gen_random_uuid()",
+        "isIdentity": false,
+        "ordinal": 1,
+        "enumValues": null
+      },
+      {
+        "name": "condominio_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 2,
         "enumValues": null
       },
       {
@@ -838,7 +617,217 @@
         "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 3,
+        "enumValues": null
+      },
+      {
+        "name": "origem",
+        "dataType": "USER-DEFINED",
+        "pgType": "pag_origem",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 4,
+        "enumValues": [
+          "APP",
+          "POS"
+        ]
+      },
+      {
+        "name": "metodo",
+        "dataType": "USER-DEFINED",
+        "pgType": "pag_metodo",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 5,
+        "enumValues": [
+          "CARTAO",
+          "PIX"
+        ]
+      },
+      {
+        "name": "gateway_pagamento",
+        "dataType": "USER-DEFINED",
+        "pgType": "pag_gateway",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 6,
+        "enumValues": [
+          "ASAAS",
+          "STONE"
+        ]
+      },
+      {
+        "name": "valor_centavos",
+        "dataType": "integer",
+        "pgType": "int4",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 7,
+        "enumValues": null
+      },
+      {
+        "name": "status",
+        "dataType": "USER-DEFINED",
+        "pgType": "pag_status",
+        "isNullable": false,
+        "defaultValue": "'CRIADO'::pag_status",
+        "isIdentity": false,
+        "ordinal": 8,
+        "enumValues": [
+          "CANCELADO",
+          "CRIADO",
+          "ESTORNADO",
+          "EXPIRADO",
+          "FALHOU",
+          "PAGO"
+        ]
+      },
+      {
+        "name": "external_id",
+        "dataType": "text",
+        "pgType": "text",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 9,
+        "enumValues": null
+      },
+      {
+        "name": "idempotency_key",
+        "dataType": "text",
+        "pgType": "text",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 10,
+        "enumValues": null
+      },
+      {
+        "name": "created_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": false,
+        "defaultValue": "now()",
+        "isIdentity": false,
+        "ordinal": 11,
+        "enumValues": null
+      },
+      {
+        "name": "paid_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 12,
+        "enumValues": null
+      }
+    ],
+    "pos_devices": [
+      {
+        "name": "id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": false,
+        "defaultValue": "gen_random_uuid()",
+        "isIdentity": false,
+        "ordinal": 1,
+        "enumValues": null
+      },
+      {
+        "name": "condominio_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 2,
+        "enumValues": null
+      },
+      {
+        "name": "serial",
+        "dataType": "text",
+        "pgType": "text",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 3,
+        "enumValues": null
+      },
+      {
+        "name": "stone_merchant_id",
+        "dataType": "text",
+        "pgType": "text",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 4,
+        "enumValues": null
+      },
+      {
+        "name": "app_version",
+        "dataType": "text",
+        "pgType": "text",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 5,
+        "enumValues": null
+      },
+      {
+        "name": "last_seen_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 6,
+        "enumValues": null
+      },
+      {
+        "name": "created_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": false,
+        "defaultValue": "now()",
+        "isIdentity": false,
+        "ordinal": 7,
+        "enumValues": null
+      },
+      {
+        "name": "updated_at",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": false,
+        "defaultValue": "now()",
+        "isIdentity": false,
+        "ordinal": 8,
+        "enumValues": null
+      }
+    ],
+    "precos_ciclo": [
+      {
+        "name": "id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": false,
+        "defaultValue": "gen_random_uuid()",
+        "isIdentity": false,
+        "ordinal": 1,
+        "enumValues": null
+      },
+      {
+        "name": "maquina_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": false,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 2,
         "enumValues": null
       },
       {
@@ -848,7 +837,17 @@
         "isNullable": false,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 3,
+        "enumValues": null
+      },
+      {
+        "name": "vigente_desde",
+        "dataType": "timestamp with time zone",
+        "pgType": "timestamptz",
+        "isNullable": false,
+        "defaultValue": "now()",
+        "isIdentity": false,
+        "ordinal": 4,
         "enumValues": null
       },
       {
@@ -858,17 +857,17 @@
         "isNullable": true,
         "defaultValue": null,
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 5,
         "enumValues": null
       },
       {
-        "name": "vigente_desde",
+        "name": "created_at",
         "dataType": "timestamp with time zone",
         "pgType": "timestamptz",
         "isNullable": false,
-        "defaultValue": null,
+        "defaultValue": "now()",
         "isIdentity": false,
-        "ordinal": null,
+        "ordinal": 6,
         "enumValues": null
       }
     ]
