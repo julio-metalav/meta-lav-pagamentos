@@ -159,6 +159,7 @@ curl -sS -X POST $BASE_URL/api/iot/evento \
     "pos_serial": "<serial cadastrado em pos_devices>",
     "condominio_maquinas_id": "<uuid>",
     "valor_centavos": 1600,
+    "valor": "16,00", // opcional (string em R$ com 2 casas)
     "metodo": "STONE_OFFLINE" | "PIX_OFFLINE" | "CARD_OFFLINE",
     "identificador_local": "LAV-01", // opcional (valida contra a máquina)
     "ref_externa": "stone-slip-123", // opcional e usado para idempotência

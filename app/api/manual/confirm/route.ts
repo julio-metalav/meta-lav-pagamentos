@@ -20,6 +20,23 @@ function gatewayFromMetodo(metodo: string): string {
   return "MANUAL";
 }
 
+function parseValorToCentavos(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  const str = String(raw).trim();
+  if (!str) return null;
+
+  const normalized = str.replace(/,/g, ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
+
+  const [integers, decimals = ""] = normalized.split(".");
+  const paddedDecimals = decimals.padEnd(2, "0");
+  const centavosStr = `${integers}${paddedDecimals}`;
+  if (!/^\d+$/.test(centavosStr)) return null;
+  const centavos = Number(centavosStr);
+  if (!Number.isFinite(centavos) || centavos <= 0) return null;
+  return centavos;
+}
+
 export async function POST(req: Request) {
   const manualToken = process.env.INTERNAL_MANUAL_TOKEN || "";
   if (!manualToken) {
@@ -54,7 +71,9 @@ export async function POST(req: Request) {
 
     const pos_serial = String(body.pos_serial ?? "").trim();
     const condominio_maquinas_id = String(body.condominio_maquinas_id ?? "").trim();
-    const valor_centavos_raw = Number(body.valor_centavos ?? 0);
+    const valor_centavos_from_string = parseValorToCentavos(body.valor);
+    const valor_centavos_raw =
+      valor_centavos_from_string !== null ? valor_centavos_from_string : Number(body.valor_centavos ?? 0);
     const metodo = normalizeMetodo(body.metodo);
     const identificador_local = body.identificador_local ? String(body.identificador_local).trim() : null;
     const ref_externa = body.ref_externa ? String(body.ref_externa).trim() : "";
@@ -63,7 +82,7 @@ export async function POST(req: Request) {
     if (!condominio_maquinas_id)
       return jsonErrorCompat("condominio_maquinas_id é obrigatório", 400, { code: "missing_condominio_maquinas_id" });
     if (!Number.isFinite(valor_centavos_raw) || valor_centavos_raw <= 0)
-      return jsonErrorCompat("valor_centavos deve ser > 0", 400, { code: "invalid_amount" });
+      return jsonErrorCompat("valor/valor_centavos inválido", 400, { code: "invalid_amount" });
 
     const valor_centavos = Math.trunc(valor_centavos_raw);
 
