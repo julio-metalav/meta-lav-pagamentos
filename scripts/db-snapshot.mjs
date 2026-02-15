@@ -61,7 +61,10 @@ const TARGET_TABLES = (process.env.DB_SNAPSHOT_TABLES || "")
   .map((t) => t.trim())
   .filter(Boolean);
 
-const TABLES = (TARGET_TABLES.length ? TARGET_TABLES : DEFAULT_TABLES).map((t) => t.trim());
+const TABLES = (TARGET_TABLES.length ? TARGET_TABLES : DEFAULT_TABLES)
+  .map((t) => t.trim())
+  .filter(Boolean)
+  .sort((a, b) => a.localeCompare(b));
 
 const SNAPSHOT_DIR = path.join(ROOT, "docs", "_snapshots");
 const JSON_OUT = path.join(SNAPSHOT_DIR, "DB_SCHEMA_SNAPSHOT.json");
@@ -106,8 +109,9 @@ async function fetchEnums() {
     map[row.enum_name].push({ value: row.enum_value, order: row.enum_order });
   }
   for (const [name, arr] of Object.entries(map)) {
-    arr.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    map[name] = arr.map((x) => x.value);
+    const values = arr.map((x) => x.value).filter(Boolean);
+    values.sort((a, b) => a.localeCompare(b));
+    map[name] = values;
   }
   return map;
 }
@@ -156,7 +160,10 @@ function normalize(rows, enumMap) {
     const table = raw.table_name;
     if (!TABLES.includes(table)) continue;
     byTable[table] ??= [];
-    const enumValues = raw.enum_values || enumMap[raw.udt_name] || null;
+    let enumValues = raw.enum_values || enumMap[raw.udt_name] || null;
+    if (Array.isArray(enumValues)) {
+      enumValues = [...new Set(enumValues)].sort((a, b) => a.localeCompare(b));
+    }
     byTable[table].push({
       name: raw.column_name,
       dataType: raw.data_type,
@@ -188,7 +195,6 @@ function buildMarkdown(meta, tables) {
   const lines = [];
   lines.push(`# Snapshot do Schema — Dashboard Nexus`);
   lines.push("");
-  lines.push(`- Gerado em: ${meta.generated_at}`);
   lines.push(`- Branch: ${meta.git.branch}`);
   lines.push(`- Commit: ${meta.git.commit}`);
   lines.push(`- Schema: ${meta.schema}`);
@@ -240,22 +246,30 @@ async function main() {
   const byTable = normalize(fetchResult.rows, enumMap);
 
   const metadata = {
-    generated_at: new Date().toISOString(),
     schema: TARGET_SCHEMA,
-    tables: TABLES,
+    tables: [...TABLES],
     source: fetchResult.source,
     safe_mode: SAFE_MODE,
-    git: gitMeta,
+    git: {
+      branch: gitMeta.branch,
+      commit: gitMeta.commit,
+      shortCommit: gitMeta.shortCommit,
+    },
     environments: ["https://ci.metalav.com.br", "https://api.metalav.com.br"],
   };
 
+  const orderedTables = {};
+  for (const name of TABLES) {
+    orderedTables[name] = byTable[name] || [];
+  }
+
   const payload = {
     metadata,
-    tables: byTable,
+    tables: orderedTables,
   };
 
   fs.writeFileSync(JSON_OUT, JSON.stringify(payload, null, 2));
-  const md = buildMarkdown(metadata, byTable);
+  const md = buildMarkdown(metadata, orderedTables);
   fs.writeFileSync(MD_OUT, md, "utf8");
 
   console.log("✅ Snapshot gerado:", JSON_OUT);
