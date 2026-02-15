@@ -181,3 +181,22 @@ curl -sS -X POST $BASE_URL/api/iot/evento \
   - Supabase: `pagamentos` deve registrar `origem=MANUAL`, `gateway_pagamento` coerente e `status=PAGO`.
   - IoT: o comando criado segue o mesmo fluxo (poll → ack → evento) já monitorado pelo E2E.
 
+## Manual Confirm (Staging)
+- **Endpoint:** `POST https://ci.metalav.com.br/api/manual/confirm`
+- **Headers obrigatórios:** `Content-Type: application/json` e `x-internal-token: <INTERNAL_MANUAL_TOKEN>`
+- **Body exemplo:**
+  ```json
+  {
+    "pos_serial": "<SERIAL>",
+    "condominio_maquinas_id": "<UUID>",
+    "valor": "16,00",
+    "metodo": "STONE_OFFLINE",
+    "identificador_local": "LAV-01",
+    "ref_externa": "piloto-001"
+  }
+  ```
+- **Resposta esperada (200):** `{ ok: true, pagamento_id, pagamento_status: "PAGO", cycle_id, command_id, status: "queued", correlation_id }`. O status `queued` indica que o comando IoT foi criado e aguarda o fluxo físico (poll → ack → evento) para completar.
+- **Observações:**
+  - `HEAD` ou `GET` retornam 405 (esperado). O header `x-matched-path` confirma a rota `/api/manual/confirm` ativa.
+  - O endpoint usa `origem="POS"`, `gateway_pagamento="STONE"` e aceita `valor` (string em R$) ou `valor_centavos` (inteiro).
+

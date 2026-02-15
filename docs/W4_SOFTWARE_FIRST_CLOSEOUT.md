@@ -84,3 +84,9 @@ Invoke-RestMethod -Method POST -Uri "http://127.0.0.1:3000/api/payments/compensa
 - Compensação scan/execute operacional
 - Logs e runbook de incidente definidos
 - Rollback simples por env
+
+## Consolidação de Ambientes (2026-02-14)
+- **Produção (meta-lav-pagamentos):** domínio `api.metalav.com.br` (CNAME → `cname.vercel-dns.com`). Projeto único no Vercel, com o deploy oficial da API.
+- **Staging / CI (pagamentos-ci):** domínio `ci.metalav.com.br` apontando para o deploy Production do projeto `pagamentos-ci` baseado na branch `test/e2e-full-runner` (commit `52698ce`).
+- Projeto Vercel duplicado chamado apenas “pagamentos” foi removido para evitar confusão entre ambientes.
+
