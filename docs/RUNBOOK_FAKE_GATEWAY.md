@@ -46,3 +46,56 @@ Exemplo de log esperado:
 3. No Supabase/Admin, verifique que `iot_commands.status` evoluiu (`ACK` → `EXECUTADO`).
 4. `ciclos` deve transicionar `LIBERADO` → `EM_USO` → `FINALIZADO` após BUSY_OFF.
 5. Em caso de erro 401/403, confirme `IOT_HMAC_SECRET` e `GW_SERIAL` cadastrados corretamente.
+
+## 6. Validação real (E2E) — 2026-02-15
+- Ambiente: `https://ci.metalav.com.br` (projeto `pagamentos-ci`).
+- IDs envolvidos:
+  - `cmd_id`: `b9778920-ba64-4d10-896d-a70234c3376d`
+  - `ciclo_id`: `5dc9b7c5-d0eb-46cc-bc82-514349813ee9`
+  - `pagamento_id`: `86dc60d7-d208-4754-b1a6-659637b9e4e6`
+- Resultado agregado:
+  - `iot_commands.status = EXECUTADO`, `ack_at = 2026-02-15 03:50:44+00`
+  - `ciclos.status = FINALIZADO` com `pulso_enviado_at`, `busy_on_at` e `busy_off_at` preenchidos
+  - `pagamentos.status = PAGO`
+  - `eventos_iot` timeline: `PULSO_ENVIADO → BUSY_ON → BUSY_OFF`
+- Fluxo executado:
+  1. `POST /api/manual/confirm` retornou `status="queued"` com `command_id` acima.
+  2. `node scripts/fake-gateway.mjs` rodando com `GW_SERIAL=GW-FAKE-001` consumiu o comando e enviou `ACK/PULSO/BUSY_ON/BUSY_OFF`.
+
+### Consulta de validação (IoT Command Cycle & Payment Status)
+Use no Supabase (ajuste o comando conforme o cliente SQL):
+```sql
+select
+  c.cmd_id,
+  c.status as cmd_status,
+  c.ack_at,
+  c.gateway_id,
+  pag.status as pagamento_status,
+  pag.id as pagamento_id,
+  pag.valor_centavos,
+  cic.id as ciclo_id,
+  cic.status as ciclo_status,
+  cic.pulso_enviado_at,
+  cic.busy_on_at,
+  cic.busy_off_at,
+  json_agg(ev.tipo order by ev.created_at) as eventos
+from iot_commands c
+left join pagamentos pag on pag.id = (c.payload ->> 'pagamento_id')
+left join ciclos cic on cic.id = (c.payload ->> 'ciclo_id')
+left join eventos_iot ev on ev.payload ->> 'cmd_id' = c.cmd_id
+where c.cmd_id = 'b9778920-ba64-4d10-896d-a70234c3376d'
+group by 1,2,3,4,5,6,7,8,9,10,11;
+```
+Resultado observado (resumo textual):
+```
+cmd_id = b9778920-ba64-4d10-896d-a70234c3376d
+cmd_status = EXECUTADO
+ack_at = 2026-02-15 03:50:44+00
+pagamento_id = 86dc60d7-d208-4754-b1a6-659637b9e4e6
+pagamento_status = PAGO
+ciclo_id = 5dc9b7c5-d0eb-46cc-bc82-514349813ee9
+ciclo_status = FINALIZADO
+pulso_enviado_at / busy_on_at / busy_off_at preenchidos
+eventos = ["PULSO_ENVIADO", "BUSY_ON", "BUSY_OFF"]
+```
+
