@@ -315,14 +315,14 @@ async function main() {
 
   console.log("\n[evento] calling /api/iot/evento (BUSY_ON)...");
   const busyOnTs = Math.floor(Date.now() / 1000);
-  const busyOn = await callIoT("/api/iot/evento", "POST", { ts: busyOnTs, machine_id: IDENTIFICADOR_LOCAL, type: "BUSY_ON" });
+  const busyOn = await callIoT("/api/iot/evento", "POST", { ts: busyOnTs, machine_id: IDENTIFICADOR_LOCAL, cmd_id, type: "BUSY_ON" });
   console.log("[evento:BUSY_ON] status=", busyOn.status, busyOn.text);
   if (busyOn.status < 200 || busyOn.status >= 300) fail("evento BUSY_ON falhou", busyOn.text);
   await expectCycleStatus(fin.cycle_id, "EM_USO");
 
   console.log("\n[evento] calling /api/iot/evento (BUSY_OFF)...");
   const busyOffTs = Math.floor(Date.now() / 1000);
-  const busyOff = await callIoT("/api/iot/evento", "POST", { ts: busyOffTs, machine_id: IDENTIFICADOR_LOCAL, type: "BUSY_OFF" });
+  const busyOff = await callIoT("/api/iot/evento", "POST", { ts: busyOffTs, machine_id: IDENTIFICADOR_LOCAL, cmd_id, type: "BUSY_OFF" });
   console.log("[evento:BUSY_OFF] status=", busyOff.status, busyOff.text);
   if (busyOff.status < 200 || busyOff.status >= 300) fail("evento BUSY_OFF falhou", busyOff.text);
   await expectCycleStatus(fin.cycle_id, "FINALIZADO");
