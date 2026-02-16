@@ -93,7 +93,7 @@ export async function pollCommands(input: PollInput): Promise<PollOk | PollErr> 
       .from("iot_commands")
       .select("id, cmd_id, tipo, payload, status, expires_at, created_at")
       .eq("gateway_id", gatewayId)
-      .in("status", ["pendente", "PENDENTE"])
+      .in("status", ["PENDENTE", "pendente", "pending"])
       .is("ack_at", null)
       .order("created_at", { ascending: true })
       .limit(limit);
@@ -110,7 +110,7 @@ export async function pollCommands(input: PollInput): Promise<PollOk | PollErr> 
         .update({ status: "ENVIADO" })
         .in("id", ids)
         .eq("gateway_id", gatewayId)
-        .in("status", ["pendente", "PENDENTE"]);
+        .in("status", ["PENDENTE", "pendente", "pending"]);
 
       if (upErr) return bad("db_error", 500, { detail: upErr.message });
     }

@@ -70,7 +70,7 @@ export async function enqueueDevCommand(req: Request): Promise<EnqueueResult> {
         tipo,
         payload,
         // status canônico PT-BR do runtime
-        status: "pendente",
+        status: "PENDENTE",
         expires_at,
       })
       .select("id, cmd_id, gateway_id, condominio_maquinas_id, tipo, payload, status, created_at")

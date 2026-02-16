@@ -187,7 +187,7 @@ export async function POST(req: Request) {
         .from("pagamentos")
         .update({ status: "PAGO", paid_at: paidAtIso })
         .eq("id", pagamentoId)
-        .in("status", ["pendente", "PENDENTE", "autorizado", "AUTORIZADO"]);
+        .in("status", ["PENDENTE", "pendente", "pending", "autorizado", "AUTORIZADO"]);
 
       if (ensurePaidErr) {
         return jsonErrorCompat("Erro ao confirmar pagamento manual.", 500, {

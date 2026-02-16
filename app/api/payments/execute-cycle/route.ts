@@ -136,6 +136,7 @@ export async function POST(req: Request) {
     const { error: cmdErr } = await sb.from("iot_commands").insert({
       gateway_id: machine.gateway_id,
       condominio_maquinas_id: machine.id,
+      pagamento_id: input.payment_id,
       cmd_id,
       tipo: "PULSE",
       payload: {
@@ -148,7 +149,7 @@ export async function POST(req: Request) {
         channel: input.channel,
         origin: input.origin,
       },
-      status: "pendente",
+      status: "PENDENTE",
       expires_at,
     });
 

@@ -1,4 +1,5 @@
 export const IOT_COMMAND_STATUS = {
+  PENDENTE: "PENDENTE",
   pendente: "pendente",
   enviado: "enviado",
   ack: "ack",
