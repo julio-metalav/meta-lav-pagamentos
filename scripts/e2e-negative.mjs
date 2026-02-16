@@ -346,6 +346,30 @@ async function main() {
   // Deve continuar FINALIZADO (não pode voltar para EM_USO)
   await expectCycleStatus(fin.cycle_id, "FINALIZADO");
 
+  console.log("\n[negativo] BUSY_OFF fora de ordem (replay após FINALIZADO, mesmo cmd_id) ...");
+  const ooBusyOffTs = Math.floor(Date.now() / 1000);
+  const ooBusyOff = await callIoT("/api/iot/evento", "POST", {
+    ts: ooBusyOffTs,
+    machine_id: IDENTIFICADOR_LOCAL,
+    cmd_id,
+    type: "BUSY_OFF",
+  });
+  console.log("[negativo:OO_BUSY_OFF] status=", ooBusyOff.status, ooBusyOff.text);
+  if (ooBusyOff.status < 200 || ooBusyOff.status >= 300) fail("negativo BUSY_OFF fora de ordem falhou", ooBusyOff.text);
+  await expectCycleStatus(fin.cycle_id, "FINALIZADO");
+
+  console.log("\n[negativo] BUSY_ON fora de ordem (replay após FINALIZADO, mesmo cmd_id) ...");
+  const ooBusyOnTs = Math.floor(Date.now() / 1000);
+  const ooBusyOn = await callIoT("/api/iot/evento", "POST", {
+    ts: ooBusyOnTs,
+    machine_id: IDENTIFICADOR_LOCAL,
+    cmd_id,
+    type: "BUSY_ON",
+  });
+  console.log("[negativo:OO_BUSY_ON] status=", ooBusyOn.status, ooBusyOn.text);
+  if (ooBusyOn.status < 200 || ooBusyOn.status >= 300) fail("negativo BUSY_ON fora de ordem falhou", ooBusyOn.text);
+  await expectCycleStatus(fin.cycle_id, "FINALIZADO");
+
   console.log("\n[negativo] PULSE duplicado (mesmo cmd_id) ...");
   const pulse2Ts = Math.floor(Date.now() / 1000);
   const pulse2 = await callIoT("/api/iot/evento", "POST", { ts: pulse2Ts, machine_id: IDENTIFICADOR_LOCAL, cmd_id, type: "PULSE" });
