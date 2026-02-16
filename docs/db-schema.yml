@@ -206,20 +206,6 @@ tables:
   # LEGADO (EN) — READ ONLY
   # ============================
 
-  iot_events:
-    canonical: false
-    runtime: false
-    read_only: true
-    table: "iot_events"
-    columns:
-      id: { type: "bigint", required: true }
-      serial: { type: "text", required: true }
-      machine_id: { type: "text", required: true }
-      event_id: { type: "text", required: true }
-      type: { type: "text", required: true }
-      payload: { type: "jsonb", required: true }
-      created_at: { type: "timestamptz", required: true }
-
   iot_eventos:
     canonical: false
     runtime: false

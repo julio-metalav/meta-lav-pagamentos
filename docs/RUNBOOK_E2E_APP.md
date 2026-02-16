@@ -136,3 +136,67 @@ curl -sS -X POST $BASE_URL/api/iot/evento \
 
 - Fluxo App → IoT → Finalização validado 100% em ambiente local, sem alterações de código.
 - Este runbook documenta o passo a passo, incluindo comandos de teste e validações nas tabelas envolvidas (pagamentos, ciclos, iot_commands).
+
+## ITEM 1 — E2E Staging V2 (Finance + IoT HMAC) — FECHADO (2026-02-14)
+- **Sintoma:** Workflow `E2E Staging V2` quebrava logo no `/api/pos/authorize` (500 `Missing env var: SUPABASE_URL`) e, após corrigir, falhava novamente no `/api/iot/poll` com `missing_secret` para o serial GW_TESTE_001.
+- **Causa raiz:** o domínio oficial `https://ci.metalav.com.br` estava apontando para o deploy Production sem variáveis Supabase carregadas (somente o Preview tinha env), e não existia a env dinâmica `IOT_HMAC_SECRET__GW_TESTE_001` no runtime.
+- **Correções:**
+  - Configuradas no projeto Vercel `pagamentos-ci` (All Environments) as envs: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+  - Garantido que `ci.metalav.com.br` aponta para o deployment correto em Production.
+  - Criada env `IOT_HMAC_SECRET__GW_TESTE_001=bb582e1167cef34f44fdaaace5a3639f226fa7c23d0a962589a103b8b0faedd7` no mesmo projeto.
+- **Validações:**
+  - `curl -i https://ci.metalav.com.br/api/pos/authorize` → 400 `pos_serial ausente` (rota viva com env carregado).
+  - `curl -i https://ci.metalav.com.br/api/iot/poll` (sem HMAC) → 401 `missing_serial` (sem `missing_secret`).
+  - GitHub Actions verdes: runs `22023640931` e `22023652108` do workflow `E2E Staging V2 (Finance + IoT HMAC)` na branch `test/e2e-full-runner`.
+- **Para não repetir:** sempre validar se o domínio aponta para o deployment Production correto antes de rodar o E2E e garantir que cada gateway usado pelo CI tenha sua `IOT_HMAC_SECRET__<SERIAL>` definida nas envs de runtime.
+
+## Piloto Stone Offline — /api/manual/confirm
+- **Objetivo:** permitir confirmação manual de pagamentos realizados em POS Stone/Pix offline e disparar o fluxo `execute-cycle` padrão sem alterar o core.
+- **Endpoint:** `POST /api/manual/confirm` (App Router). Requer header `x-internal-token` igual ao env `INTERNAL_MANUAL_TOKEN`. Se o token não existir no runtime, o endpoint responde 501 para evitar exposição.
+- **Payload:**
+  ```json
+  {
+    "pos_serial": "<serial cadastrado em pos_devices>",
+    "condominio_maquinas_id": "<uuid>",
+    "valor_centavos": 1600,
+    "valor": "16,00", // opcional (string em R$ com 2 casas)
+    "metodo": "STONE_OFFLINE" | "PIX_OFFLINE" | "CARD_OFFLINE",
+    "identificador_local": "LAV-01", // opcional (valida contra a máquina)
+    "ref_externa": "stone-slip-123", // opcional e usado para idempotência
+    "observacao": "opcional"
+  }
+  ```
+- **Fluxo interno:**
+  1. Valida POS + máquina (mesma lógica do POS authorize) e garante máquina ativa/gateway vinculado.
+  2. Idempotência: reutiliza pagamento se `ref_externa` ou `idempotency_key` (`manual:<pos_serial>:<ref>`) já existir.
+  3. Cria/atualiza pagamento com `origem="MANUAL"`, `metodo` conforme informado, `gateway_pagamento` inferido (`STONE`/`PIX`/`MANUAL`) e status `PAGO`.
+  4. Chama internamente `POST /api/payments/execute-cycle` reutilizando o serviço atual (sem duplicar lógica) com idempotency key `manual-exec:<ref>`.
+  5. Retorna `{ ok, correlation_id, pagamento_id, pagamento_status="PAGO", cycle_id, command_id, status: "queued" }`.
+- **Segurança/Env:**
+  - `INTERNAL_MANUAL_TOKEN` deve estar definido (Production/Preview). Sem ele, o endpoint fica desabilitado.
+  - O CI preenche o token via secret `INTERNAL_MANUAL_TOKEN` para testar o modo `MANUAL_CONFIRM` no script `scripts/e2e-full.mjs` (`MANUAL_CONFIRM=1`).
+- **Validações rápidas:**
+  - Sem token: `curl -X POST ... -H 'x-internal-token: wrong'` → 401.
+  - Com token e POS válido: resposta 200 com command_id e cycle_id.
+  - Supabase: `pagamentos` deve registrar `origem=MANUAL`, `gateway_pagamento` coerente e `status=PAGO`.
+  - IoT: o comando criado segue o mesmo fluxo (poll → ack → evento) já monitorado pelo E2E.
+
+## Manual Confirm (Staging)
+- **Endpoint:** `POST https://ci.metalav.com.br/api/manual/confirm`
+- **Headers obrigatórios:** `Content-Type: application/json` e `x-internal-token: <INTERNAL_MANUAL_TOKEN>`
+- **Body exemplo:**
+  ```json
+  {
+    "pos_serial": "<SERIAL>",
+    "condominio_maquinas_id": "<UUID>",
+    "valor": "16,00",
+    "metodo": "STONE_OFFLINE",
+    "identificador_local": "LAV-01",
+    "ref_externa": "piloto-001"
+  }
+  ```
+- **Resposta esperada (200):** `{ ok: true, pagamento_id, pagamento_status: "PAGO", cycle_id, command_id, status: "queued", correlation_id }`. O status `queued` indica que o comando IoT foi criado e aguarda o fluxo físico (poll → ack → evento) para completar.
+- **Observações:**
+  - `HEAD` ou `GET` retornam 405 (esperado). O header `x-matched-path` confirma a rota `/api/manual/confirm` ativa.
+  - O endpoint usa `origem="POS"`, `gateway_pagamento="STONE"` e aceita `valor` (string em R$) ou `valor_centavos` (inteiro).
+
