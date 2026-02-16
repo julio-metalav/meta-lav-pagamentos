@@ -331,20 +331,40 @@ async function main() {
   // NEGATIVE CASES (idempotência e ordem de eventos) — sem mexer em backend
   // ─────────────────────────────────────────────────────────────
 
-  console.log("\n[negativo] BUSY_OFF duplicado (mesmo cmd_id) ...");
+    console.log("\n[negativo] BUSY_OFF duplicado (mesmo cmd_id) ...");
   const busyOff2Ts = Math.floor(Date.now() / 1000);
-  const busyOff2 = await callIoT("/api/iot/evento", "POST", { ts: busyOff2Ts, machine_id: IDENTIFICADOR_LOCAL, cmd_id, type: "BUSY_OFF" });
+  const busyOff2 = await callIoT("/api/iot/evento", "POST", {
+    ts: busyOff2Ts,
+    machine_id: IDENTIFICADOR_LOCAL,
+    cmd_id,
+    type: "BUSY_OFF",
+  });
   console.log("[negativo:BUSY_OFF#2] status=", busyOff2.status, busyOff2.text);
-  if (busyOff2.status < 200 || busyOff2.status >= 300) fail("negativo BUSY_OFF duplicado falhou", busyOff2.text);
+  if (busyOff2.status < 200 || busyOff2.status >= 300)
+    fail("negativo BUSY_OFF duplicado falhou", busyOff2.text);
   await expectCycleStatus(fin.cycle_id, "FINALIZADO");
 
   console.log("\n[negativo] BUSY_ON após FINALIZADO (mesmo cmd_id) ...");
   const busyOn2Ts = Math.floor(Date.now() / 1000);
-  const busyOn2 = await callIoT("/api/iot/evento", "POST", { ts: busyOn2Ts, machine_id: IDENTIFICADOR_LOCAL, cmd_id, type: "BUSY_ON" });
+  const busyOn2 = await callIoT("/api/iot/evento", "POST", {
+    ts: busyOn2Ts,
+    machine_id: IDENTIFICADOR_LOCAL,
+    cmd_id,
+    type: "BUSY_ON",
+  });
   console.log("[negativo:BUSY_ON#2] status=", busyOn2.status, busyOn2.text);
-  if (busyOn2.status < 200 || busyOn2.status >= 300) fail("negativo BUSY_ON após finalizado falhou", busyOn2.text);
-  // Deve continuar FINALIZADO (não pode voltar para EM_USO)
+  if (busyOn2.status < 200 || busyOn2.status >= 300)
+    fail("negativo BUSY_ON após finalizado falhou", busyOn2.text);
   await expectCycleStatus(fin.cycle_id, "FINALIZADO");
+
+  console.log("\n[negativo] ACK duplicado após FINALIZADO (mesmo cmd_id) ...");
+  const ack2Ts = Math.floor(Date.now() / 1000);
+  const ack2 = await callIoT("/api/iot/ack", "POST", { cmd_id, ok: true, ts: ack2Ts });
+  console.log("[negativo:ACK#2] status=", ack2.status, ack2.text);
+  if (ack2.status < 200 || ack2.status >= 300)
+    fail("negativo ACK duplicado falhou", ack2.text);
+  await expectCycleStatus(fin.cycle_id, "FINALIZADO");
+
 
   console.log("\n[negativo] BUSY_OFF fora de ordem (replay após FINALIZADO, mesmo cmd_id) ...");
   const ooBusyOffTs = Math.floor(Date.now() / 1000);
