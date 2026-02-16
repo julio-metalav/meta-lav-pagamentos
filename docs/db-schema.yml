@@ -112,6 +112,9 @@ tables:
       duracao_ciclo_min: { type: "int", required: false }
       buffer_retirada_min: { type: "int", required: false }
       pos_device_id: { type: "uuid", required: false }
+      delivery_mode: { type: "text", required: true, default: "ACK_ONLY", note: "ACK_ONLY|BUSY_REQUIRED|ACK_PLUS_BUSY" }
+      delivery_timeout_ack_sec: { type: "int", required: true, default: 10 }
+      delivery_timeout_busy_sec: { type: "int", required: true, default: 15 }
       created_at: { type: "timestamptz", required: false }
       updated_at: { type: "timestamptz", required: false }
 
