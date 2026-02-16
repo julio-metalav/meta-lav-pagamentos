@@ -41,7 +41,7 @@ tables:
           - "ABORTADO"
     columns:
       id: { type: "uuid", required: true }
-      pagamento_id: { type: "uuid", required: false }
+      pagamento_id: { type: "uuid", required: true }
       condominio_id: { type: "uuid", required: true }
       maquina_id: { type: "uuid", required: true }
       status: { type: "ciclo_status", required: true }
