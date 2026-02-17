@@ -1,4 +1,4 @@
-# Contrato — Dashboard Nexus (Telas 1..5)
+	# Contrato — Dashboard Nexus (Telas 1..5)
 
 Todas as telas leem a fonte única em PT-BR (`pagamentos`, `ciclos`, `iot_commands`, `eventos_iot`, `gateways`, `pos_devices`, `condominio_maquinas`, `precos_ciclo`). Sem API pronta, usamos **SQL direto (admin)** conforme descrito.
 
@@ -14,10 +14,16 @@ Todas as telas leem a fonte única em PT-BR (`pagamentos`, `ciclos`, `iot_comman
 - **Regras adicionais**:
   - Se existe `busy_on_at` **ou** evento `BUSY_ON`, nunca marcar como falha, mesmo que `ack_at > expires_at`.
   - O diagnóstico deve olhar `eventos_iot` para confirmar `BUSY_ON`/`BUSY_OFF` usando `cmd_id` no payload.
+## Dashboard 1 — Machines Status (OK)
+- **Endpoint**: `GET /api/admin/machines-status?limit=`
+- **Retorno**: `{ ok, metrics, rows }`
+- **Campos em `rows`**: `identificador_local`, `tipo_maquina`, `last_cycle_status`, `busy_on_at`, `busy_off_at`, `status`, `stale_pending`
+- **Status possíveis**: `AVAILABLE`, `PENDING`, `IN_USE`, `ERROR`
+- **Regra `stale_pending`**: `true` quando o último ciclo está `PENDING` e `created_at` passou de 20 minutos (TTL = 20m); nesse caso, `status = ERROR`
 
 ---
 
-## Dashboard 1 — Receita Bruta e Conversão
+## Dashboard 2 — Receita Bruta e Conversão
 - **Objetivo**: dar visão diária/semanal de volume financeiro por condomínio / método / gateway de pagamento.
 - **KPIs**:
   - `total_pagamentos`: COUNT(*) com `status='PAGO'`
@@ -54,7 +60,7 @@ Todas as telas leem a fonte única em PT-BR (`pagamentos`, `ciclos`, `iot_comman
 
 ---
 
-## Dashboard 2 — Timeline de Ciclos e Status Operacional
+## Dashboard 3 — Timeline de Ciclos e Status Operacional
 - **Objetivo**: visualizar rapidamente o funil `Pagamento → Ciclo → Eventos IoT`.
 - **KPIs**:
   - `ciclos_abertos`: `status IN ('AGUARDANDO_LIBERACAO','LIBERADO','EM_USO')`
@@ -116,7 +122,7 @@ Todas as telas leem a fonte única em PT-BR (`pagamentos`, `ciclos`, `iot_comman
 
 ---
 
-## Dashboard 3 — Fila IoT e SLA de Comandos
+## Dashboard 4 — Fila IoT e SLA de Comandos
 - **Objetivo**: controlar `iot_commands` pendentes, expirados ou sem ACK.
 - **KPIs**:
   - `comandos_pendentes`: `status IN ('PENDING','CRIADO')`
@@ -174,7 +180,7 @@ Todas as telas leem a fonte única em PT-BR (`pagamentos`, `ciclos`, `iot_comman
 
 ---
 
-## Dashboard 4 — Saúde de Gateways + POS
+## Dashboard 5 — Saúde de Gateways + POS
 - **Objetivo**: acompanhar hardware (`gateways`, `pos_devices`) por condomínio.
 - **KPIs**:
   - `gateways_offline`: `now() - last_seen_at > interval '5 minutes'`
@@ -217,7 +223,7 @@ Todas as telas leem a fonte única em PT-BR (`pagamentos`, `ciclos`, `iot_comman
 
 ---
 
-## Dashboard 5 — Catálogo de Máquinas e Preços
+## Dashboard 6 — Catálogo de Máquinas e Preços
 - **Objetivo**: consolidar `condominio_maquinas` + `precos_ciclo` + vinculação POS/Gateway.
 - **KPIs**:
   - `maquinas_ativas`: COUNT onde `ativa = true`
