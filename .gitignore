@@ -46,3 +46,4 @@ AGENTS/
 BOOTSTRAP/
 # Local env
 .env.local
+.env*.local
