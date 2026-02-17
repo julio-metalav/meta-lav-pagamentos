@@ -1,7 +1,7 @@
 # Snapshot do Schema — Dashboard Nexus
 
-- Branch: test/e2e-full-runner
-- Commit: 356279953002ad1cf1c7647c43faa46a9630ee48
+- Branch: fix/admin-gatekeeper
+- Commit: 4295d44bc934c56b50f564fc14ecea57640c042d
 - Schema: public
 - Safe mode: ON
 - Fonte: rpc
@@ -43,6 +43,9 @@ Tabelas monitoradas: ciclos, condominio_maquinas, eventos_iot, gateways, iot_com
 | `pos_device_id` | uuid | ✅ | - | - |
 | `created_at` | timestamptz | ❌ | `now()` | - |
 | `updated_at` | timestamptz | ❌ | `now()` | - |
+| `delivery_mode` | text | ❌ | `'ACK_ONLY'::text` | - |
+| `delivery_timeout_ack_sec` | int4 | ❌ | `10` | - |
+| `delivery_timeout_busy_sec` | int4 | ❌ | `15` | - |
 
 ---
 
@@ -92,6 +95,7 @@ Tabelas monitoradas: ciclos, condominio_maquinas, eventos_iot, gateways, iot_com
 | `expires_at` | timestamptz | ❌ | - | - |
 | `created_at` | timestamptz | ❌ | `now()` | - |
 | `ack_at` | timestamptz | ✅ | - | - |
+| `pagamento_id` | uuid | ✅ | - | - |
 
 ---
 

@@ -69,7 +69,7 @@ tables:
           - "ERRO"
     columns:
       id: { type: "uuid", required: true }
-      gateway_id: { type: "uuid", required: true }
+      gateway_id: { type: "uuid", required: false }
       maquina_id: { type: "uuid", required: false }
       tipo: { type: "iot_evento_tipo", required: true }
       payload: { type: "jsonb", required: true }
@@ -85,9 +85,9 @@ tables:
       gateway_id: { type: "uuid", required: true }
       cmd_id: { type: "uuid", required: true }
       status: { type: "text", required: true }
-      tipo: { type: "text", required: false }
+      tipo: { type: "text", required: true }
       payload: { type: "jsonb", required: true }
-      condominio_maquinas_id: { type: "uuid", required: false }
+      condominio_maquinas_id: { type: "uuid", required: true }
       ack_at: { type: "timestamptz", required: false }
       expires_at: { type: "timestamptz", required: false }
       created_at: { type: "timestamptz", required: true }
@@ -108,15 +108,15 @@ tables:
       gateway_id: { type: "uuid", required: true }
       identificador_local: { type: "text", required: true }
       tipo: { type: "tipo_maquina", required: true }
-      ativa: { type: "bool", required: false }
-      duracao_ciclo_min: { type: "int", required: false }
-      buffer_retirada_min: { type: "int", required: false }
+      ativa: { type: "bool", required: true, default: true }
+      duracao_ciclo_min: { type: "int", required: true, default: 35 }
+      buffer_retirada_min: { type: "int", required: true, default: 5 }
       pos_device_id: { type: "uuid", required: false }
       delivery_mode: { type: "text", required: true, default: "ACK_ONLY", note: "ACK_ONLY|BUSY_REQUIRED|ACK_PLUS_BUSY" }
       delivery_timeout_ack_sec: { type: "int", required: true, default: 10 }
       delivery_timeout_busy_sec: { type: "int", required: true, default: 15 }
-      created_at: { type: "timestamptz", required: false }
-      updated_at: { type: "timestamptz", required: false }
+      created_at: { type: "timestamptz", required: true }
+      updated_at: { type: "timestamptz", required: true }
 
   gateways:
     canonical: true
@@ -189,7 +189,7 @@ tables:
     columns:
       id: { type: "uuid", required: true }
       condominio_id: { type: "uuid", required: true }
-      maquina_id: { type: "uuid", required: false }
+      maquina_id: { type: "uuid", required: true }
 
       # DB real (vimos na prática via constraint):
       origem: { type: "pag_origem", required: true }

@@ -178,4 +178,12 @@ join lateral (
 4. `iot_commands.status` precisa estar em `('PENDING','ACKED','EXECUTADO')`; outros valores entram em "exceções".
 5. `ciclos` e `eventos_iot` são a linha de frente para timeline do Dashboard 2/3.
 
-Mantemos este arquivo como contrato definitivo. Qualquer divergência encontrada via snapshot deve resultar em PR atualizando aqui + YAML. 
+Mantemos este arquivo como contrato definitivo. Qualquer divergência encontrada via snapshot deve resultar em PR atualizando aqui + YAML.
+## Snapshot Confirmado (2026-02-16)
+- Snapshot gerado via `node scripts/db-snapshot.mjs` (docs/_snapshots/DB_SCHEMA_SNAPSHOT.*).
+- Ajustes refletidos nesta atualização:
+  - `pagamentos.maquina_id` confirmado como NOT NULL.
+  - `condominio_maquinas.gateway_id` é opcional; `ativa`, `duracao_ciclo_min`, `buffer_retirada_min`, `created_at`, `updated_at` seguem NOT NULL com defaults no banco.
+  - `iot_commands.condominio_maquinas_id` e `tipo` são NOT NULL; coluna `pagamento_id` documentada como opcional.
+- Confirmação: runtime PT-BR (`pagamentos`, `ciclos`, `iot_commands`, `eventos_iot`, `condominio_maquinas`) permanece a única fonte válida; tabelas EN continuam read-only.
+

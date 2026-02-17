@@ -14,9 +14,9 @@
     "source": "rpc",
     "safe_mode": true,
     "git": {
-      "branch": "test/e2e-full-runner",
-      "commit": "356279953002ad1cf1c7647c43faa46a9630ee48",
-      "shortCommit": "3562799"
+      "branch": "fix/admin-gatekeeper",
+      "commit": "4295d44bc934c56b50f564fc14ecea57640c042d",
+      "shortCommit": "4295d44"
     },
     "environments": [
       "https://ci.metalav.com.br",
@@ -264,6 +264,36 @@
         "defaultValue": "now()",
         "isIdentity": false,
         "ordinal": 11,
+        "enumValues": null
+      },
+      {
+        "name": "delivery_mode",
+        "dataType": "text",
+        "pgType": "text",
+        "isNullable": false,
+        "defaultValue": "'ACK_ONLY'::text",
+        "isIdentity": false,
+        "ordinal": 12,
+        "enumValues": null
+      },
+      {
+        "name": "delivery_timeout_ack_sec",
+        "dataType": "integer",
+        "pgType": "int4",
+        "isNullable": false,
+        "defaultValue": "10",
+        "isIdentity": false,
+        "ordinal": 13,
+        "enumValues": null
+      },
+      {
+        "name": "delivery_timeout_busy_sec",
+        "dataType": "integer",
+        "pgType": "int4",
+        "isNullable": false,
+        "defaultValue": "15",
+        "isIdentity": false,
+        "ordinal": 14,
         "enumValues": null
       }
     ],
@@ -586,6 +616,16 @@
         "defaultValue": null,
         "isIdentity": false,
         "ordinal": 10,
+        "enumValues": null
+      },
+      {
+        "name": "pagamento_id",
+        "dataType": "uuid",
+        "pgType": "uuid",
+        "isNullable": true,
+        "defaultValue": null,
+        "isIdentity": false,
+        "ordinal": 11,
         "enumValues": null
       }
     ],
