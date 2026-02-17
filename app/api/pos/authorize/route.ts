@@ -97,7 +97,56 @@ export async function POST(req: Request) {
     }
     if (!maquina.ativa) return jsonErrorCompat("Máquina está inativa.", 409, { code: "machine_inactive" });
     if (!maquina.gateway_id) return jsonErrorCompat("Máquina sem gateway_id vinculado.", 409, { code: "missing_gateway_id" });
+        // 2.1) Bloqueio operacional — não autorizar se máquina não estiver AVAILABLE
+    const STALE_PENDING_MINUTES = 20;
+    const STALE_PENDING_MS = STALE_PENDING_MINUTES * 60 * 1000;
 
+    const { data: lastCycle, error: lastCycleErr } = await supabase
+      .from("ciclos")
+      .select("id,status,created_at,busy_on_at,busy_off_at")
+      .eq("maquina_id", maquina.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (lastCycleErr) {
+      return jsonErrorCompat("Erro ao buscar ciclo da máquina.", 500, {
+        code: "db_error",
+        extra: { details: lastCycleErr.message },
+      });
+    }
+
+    if (lastCycle) {
+      const cycleStatus = String(lastCycle.status || "").toUpperCase();
+      const busyOn = !!lastCycle.busy_on_at;
+      const busyOff = !!lastCycle.busy_off_at;
+
+      if (cycleStatus !== "FINALIZADO") {
+        if (busyOn && !busyOff) {
+          return jsonErrorCompat("Máquina em uso no momento.", 409, {
+            code: "machine_in_use",
+            extra: { cycle_id: lastCycle.id, maquina_id: maquina.id, stale_pending: false },
+          });
+        }
+
+        // PENDING (não finalizado e não em uso)
+        const createdAtMs = lastCycle.created_at ? Date.parse(lastCycle.created_at) : NaN;
+        const stalePending = Number.isFinite(createdAtMs) && createdAtMs <= Date.now() - STALE_PENDING_MS;
+
+        if (stalePending) {
+          return jsonErrorCompat("Máquina com pendência em erro (stale).", 409, {
+            code: "machine_error",
+            extra: { cycle_id: lastCycle.id, maquina_id: maquina.id, stale_pending: true },
+          });
+        }
+
+        return jsonErrorCompat("Máquina com pendência em andamento.", 409, {
+          code: "machine_pending",
+          extra: { cycle_id: lastCycle.id, maquina_id: maquina.id, stale_pending: false },
+        });
+      }
+    }
+ 
     // 3) Idempotência (anti retry/duplo clique)
     const minuteBucket = Math.floor(Date.now() / 60000);
     const idempotency_key =
