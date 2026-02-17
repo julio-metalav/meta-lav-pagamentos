@@ -186,4 +186,5 @@ Mantemos este arquivo como contrato definitivo. Qualquer divergência encontrada
   - `condominio_maquinas.gateway_id` é opcional; `ativa`, `duracao_ciclo_min`, `buffer_retirada_min`, `created_at`, `updated_at` seguem NOT NULL com defaults no banco.
   - `iot_commands.condominio_maquinas_id` e `tipo` são NOT NULL; coluna `pagamento_id` documentada como opcional.
 - Confirmação: runtime PT-BR (`pagamentos`, `ciclos`, `iot_commands`, `eventos_iot`, `condominio_maquinas`) permanece a única fonte válida; tabelas EN continuam read-only.
+> Nota: E2E POS→Payments→IoT validado localmente em 2026-02-17 (payment_id 291c66d7-e779-44ff-b348-c6b9c7b008f2, cycle_id 36b5616b-002c-495a-8f17-e225e34a6661, cmd_id 0bd50798-c5e4-461c-bdbc-111a63f98021).
 

@@ -99,3 +99,35 @@ pulso_enviado_at / busy_on_at / busy_off_at preenchidos
 eventos = ["PULSO_ENVIADO", "BUSY_ON", "BUSY_OFF"]
 ```
 
+## E2E Local Confirmado (2026-02-17)
+- payment_id: 291c66d7-e779-44ff-b348-c6b9c7b008f2
+- cycle_id: 36b5616b-002c-495a-8f17-e225e34a6661
+- cmd_id: 0bd50798-c5e4-461c-bdbc-111a63f98021
+- gateway_serial: GW-TESTE-001
+- identificador_local: LAV-01
+- ack_at: 2026-02-17T04:11:54+00:00
+- busy_on_at: 2026-02-17T04:11:57+00:00
+- busy_off_at: 2026-02-17T04:12:09+00:00
+- estado_calculado: FINALIZADO
+
+### Passos executados
+1. `POST /api/payments/authorize`
+2. `POST /api/payments/confirm`
+3. `POST /api/payments/execute-cycle`
+4. `GET /api/admin/iot-status?limit=20`
+
+### Comandos usados
+```
+# authorize
+curl -X POST "$BASE_URL/api/payments/authorize" -H "content-type: application/json" -d '{ "channel": "pos", "origin": { "pos_device_id": "<uuid>", "user_id": null }, "condominio_id": "<uuid>", "condominio_maquinas_id": "<uuid>", "service_type": "lavadora", "idempotency_key": "sumni-p2-e2e-20260217" }'
+
+# confirm
+curl -X POST "$BASE_URL/api/payments/confirm" -H "content-type: application/json" -d '{ "channel": "pos", "origin": { "pos_device_id": "<uuid>", "user_id": null }, "payment_id": "291c66d7-e779-44ff-b348-c6b9c7b008f2", "provider": "stone", "provider_ref": "sumni-p2-e2e-20260217", "result": "approved" }'
+
+# execute-cycle
+curl -X POST "$BASE_URL/api/payments/execute-cycle" -H "content-type: application/json" -d '{ "channel": "pos", "origin": { "pos_device_id": "<uuid>", "user_id": null }, "payment_id": "291c66d7-e779-44ff-b348-c6b9c7b008f2", "condominio_maquinas_id": "<uuid>", "idempotency_key": "sumni-p2-e2e-20260217" }'
+
+# monitor iot
+curl "$BASE_URL/api/admin/iot-status?limit=20"
+```
+
