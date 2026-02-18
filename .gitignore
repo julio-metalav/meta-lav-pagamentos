@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# aider
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v4/
