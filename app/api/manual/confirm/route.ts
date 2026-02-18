@@ -178,7 +178,6 @@ export async function POST(req: Request) {
         return jsonErrorCompat("Erro ao criar pagamento manual.", 500, {
           code: "manual_payment_create_failed",
           extra: { details: createErr?.message },
-        });
       }
 
       pagamentoId = createdPay.id;
