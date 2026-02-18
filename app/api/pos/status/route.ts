@@ -34,15 +34,8 @@ import { jsonErrorCompat } from "@/lib/api/errors";
 function parseUiState(payment: PaymentRow, cycle?: CycleRow | null, command?: CommandRow | null) {
   const paymentStatus = String(payment?.status || "").toUpperCase();
   const cycleStatus = String(cycle?.status || "").toUpperCase();
-  const now = Date.now();
-  const paymentExpiresAt = payment?.expires_at ? Date.parse(payment.expires_at) : null;
-  const commandExpiresAt = command?.expires_at ? Date.parse(command.expires_at) : null;
-  const expired =
-    paymentStatus === "CRIADO" &&
-    ((paymentExpiresAt && paymentExpiresAt < now) || (commandExpiresAt && commandExpiresAt < now));
 
   if (!paymentStatus) return "ERRO";
-  if (expired) return "EXPIRADO";
 
   if (paymentStatus === "CRIADO") return "AGUARDANDO_PAGAMENTO";
   if (paymentStatus !== "PAGO") {
@@ -69,7 +62,7 @@ export async function GET(req: Request) {
 
     const { data: payment, error: payErr } = await sb
       .from("pagamentos")
-      .select("id,status,valor_centavos,metodo,created_at,expires_at")
+      .select("id,status,valor_centavos,metodo,created_at")
       .eq("id", pagamentoId)
       .maybeSingle();
 
@@ -92,7 +85,7 @@ export async function GET(req: Request) {
     try {
       const commandQuery = sb
         .from("iot_commands")
-        .select("id,cmd_id,status,created_at,expires_at,payload")
+        .select("id,cmd_id,status,created_at,payload")
         .order("created_at", { ascending: false })
         .limit(1);
 
@@ -121,7 +114,7 @@ export async function GET(req: Request) {
         valor_centavos: payment.valor_centavos,
         metodo: payment.metodo,
         created_at: payment.created_at,
-        expires_at: payment.expires_at ?? null,
+        expires_at: null,
       },
       ciclo: cycle
         ? {
@@ -137,7 +130,7 @@ export async function GET(req: Request) {
             cmd_id: command.cmd_id,
             status: command.status,
             created_at: command.created_at,
-            expires_at: command.expires_at ?? null,
+            expires_at: null,
             correlation_id: (command.payload as Record<string, unknown> | null)?.correlation_id || null,
           }
         : null,
