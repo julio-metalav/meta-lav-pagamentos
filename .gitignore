@@ -40,9 +40,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# OpenClaw artifacts
-.openclaw/
-AGENTS/
-BOOTSTRAP/
-# Local env
-.env.local
+# aider
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v4/
+
+# aider
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v4/

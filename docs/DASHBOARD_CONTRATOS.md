@@ -15,6 +15,33 @@ Todas as telas leem a fonte única em PT-BR (`pagamentos`, `ciclos`, `iot_comman
   - Se existe `busy_on_at` **ou** evento `BUSY_ON`, nunca marcar como falha, mesmo que `ack_at > expires_at`.
   - O diagnóstico deve olhar `eventos_iot` para confirmar `BUSY_ON`/`BUSY_OFF` usando `cmd_id` no payload.
 
+## Dashboard 1 — Machines Status (OK)
+- **Endpoint**: `GET /api/admin/machines-status?limit=`
+- **Retorno**: `{ ok, metrics, rows }`
+- **Campos em `rows`**: `identificador_local`, `tipo_maquina`, `last_cycle_status`, `busy_on_at`, `busy_off_at`, `status`, `stale_pending`
+- **Status possíveis**: `DISPONIVEL`, `PENDENTE`, `EM_USO`, `ERRO` (labels UI podem seguir EN; runtime é PT-BR)
+- **Regra `stale_pending`**: `true` quando o último ciclo está `PENDING` e `created_at` passou de 20 minutos (TTL = 20m); nesse caso, `status = ERROR`
+
+## Reservas e Bloqueio Lógico (Dashboard parametrizável)
+- **Objetivo**: permitir bloquear máquinas de forma lógica (software) independente do BUSY físico. Pré-bloqueios são configuráveis e devem refletir tanto no App (mobile) quanto no POS.
+- **Estados de disponibilidade**:
+  - `LIVRE`: BUSY=OFF e sem reserva ativa.
+  - `EM_USO`: BUSY=ON (ciclo em andamento). Depende do sinal físico do gateway.
+  - `BLOQUEADA_POR_RESERVA`: BUSY=OFF, mas existe pré-bloqueio ativo/reserva confirmada.
+- **Parâmetros (todos PT-BR, editáveis no dashboard; precedência máquina > canal > condomínio)**:
+  - `pre_bloqueio_minutos`: minutos antes da reserva em que a máquina entra em bloqueio lógico.
+  - `janela_uso_minutos`: tolerância (minutos) para manter a máquina bloqueada durante a reserva.
+  - `cancelamento_ate_minutos`: limite (em minutos) para cancelamento com reembolso parcial (vide percentual_reembolso_cancelamento).
+  - `percentual_reembolso_cancelamento`: percentual devolvido em cancelamentos dentro da janela permitida.
+  - `politica_no_show`: ex.: `PERDE_100`, `PERDE_50`.
+  - `permitir_pos_em_pre_bloqueio`: booleano; padrão `false`. Se `false`, o POS também honra o bloqueio lógico.
+  - `max_dias_futuros_reserva`: quantos dias à frente o usuário pode reservar.
+  - `max_reservas_ativas_por_usuario`: limite simultâneo de reservas por cliente.
+- **Regras operacionais**:
+  - `/api/pos/authorize` **não** bloqueia por estado operacional; trata apenas regras financeiras e duplicidade de identificador.
+  - `/api/payments/execute-cycle` é a trava final: recusa se BUSY=ON (hardware) ou se a máquina está bloqueada por reserva (`blocked_until`, `blocked_reason="RESERVA"`).
+  - Endpoints de status/listagem devem expor `{ availability, blocked_until, blocked_reason }` para App e POS refletirem a situação real.
+
 ---
 
 ## Dashboard 1 — Receita Bruta e Conversão
