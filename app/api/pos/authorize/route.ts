@@ -75,7 +75,27 @@ export async function POST(req: Request) {
       });
     }
 
-    // 2) Máquina vinculada ao POS
+    // 2) Validação de identificador duplicado (mesmo condominio)
+    const { data: identMatches, error: identErr } = await supabase
+      .from("condominio_maquinas")
+      .select("id,ativa")
+      .eq("condominio_id", condominio_id)
+      .eq("identificador_local", identificador_local)
+      .limit(2);
+
+    if (identErr) {
+      return jsonErrorCompat("Erro ao validar identificador_local.", 500, { code: "db_error", extra: { details: identErr.message } });
+    }
+
+    const activeMatches = (identMatches || []).filter((row: { ativa: boolean | null }) => !!row?.ativa);
+    if (activeMatches.length > 1) {
+      return jsonErrorCompat("identificador_local duplicado no condomínio.", 409, {
+        code: "duplicate_machine_identifier",
+        extra: { condominio_id, identificador_local },
+      });
+    }
+
+    // 3) Máquina vinculada ao POS
     const { data: maquina, error: maqErr } = await supabase
       .from("condominio_maquinas")
       .select("id, condominio_id, gateway_id, tipo, identificador_local, ativa, pos_device_id")
