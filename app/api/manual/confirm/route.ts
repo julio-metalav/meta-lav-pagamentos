@@ -180,8 +180,6 @@ export async function POST(req: Request) {
           extra: { details: createErr?.message },
         });
       }
-      }
-
       pagamentoId = createdPay.id;
     } else {
       // Idempotência + compatibilidade com o fluxo real:
@@ -216,6 +214,7 @@ export async function POST(req: Request) {
         }
       } else if (curStatus === "PAGO") {
         // já confirmado — segue para execute-cycle (idempotência do execute-cycle segura duplicados)
+        return NextResponse.json({ ok: true, pagamento_id: pagamentoId, status: "PAGO" }, { status: 200 });
       } else {
         return jsonErrorCompat("Pagamento em status inválido para confirmação.", 409, {
           code: "payment_not_confirmable",
