@@ -180,8 +180,6 @@ export async function POST(req: Request) {
           extra: { details: createErr?.message },
         });
       }
-        });
-      }
       }
 
       pagamentoId = createdPay.id;
@@ -201,7 +199,29 @@ export async function POST(req: Request) {
         });
       }
 
+      const curStatus = String(currentPay?.status || "");
 
+      if (curStatus === "CRIADO") {
+        const { error: ensurePaidErr } = await sb
+          .from("pagamentos")
+          .update({ status: "PAGO", paid_at: paidAtIso })
+          .eq("id", pagamentoId)
+          .eq("status", "CRIADO");
+
+        if (ensurePaidErr) {
+          return jsonErrorCompat("Erro ao confirmar pagamento manual.", 500, {
+            code: "manual_payment_update_failed",
+            extra: { details: ensurePaidErr.message },
+          });
+        }
+      } else if (curStatus === "PAGO") {
+        // já confirmado — segue para execute-cycle (idempotência do execute-cycle segura duplicados)
+      } else {
+        return jsonErrorCompat("Pagamento em status inválido para confirmação.", 409, {
+          code: "payment_not_confirmable",
+          extra: { pagamento_id: pagamentoId, status: curStatus },
+        });
+      }
     }
 
     const execIdempotencyKey = ref_externa
