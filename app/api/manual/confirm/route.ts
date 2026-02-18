@@ -78,6 +78,11 @@ export async function POST(req: Request) {
     const identificador_local = body.identificador_local ? String(body.identificador_local).trim() : null;
     const ref_externa = body.ref_externa ? String(body.ref_externa).trim() : "";
 
+    const pagamento_id_from_body = body.pagamento_id ? String(body.pagamento_id).trim() : "";
+    if (pagamento_id_from_body && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pagamento_id_from_body)) {
+      return jsonErrorCompat("pagamento_id inválido", 400, { code: "invalid_pagamento_id" });
+    }
+
     if (!pos_serial) return jsonErrorCompat("pos_serial é obrigatório", 400, { code: "missing_pos_serial" });
     if (!condominio_maquinas_id)
       return jsonErrorCompat("condominio_maquinas_id é obrigatório", 400, { code: "missing_condominio_maquinas_id" });
@@ -119,10 +124,10 @@ export async function POST(req: Request) {
     }
 
     const manualIdempotencyKey = ref_externa
-      ? `manual:${pos_serial}:${ref_externa}:${valor_centavos}`
-      : null;
+      ? `manual:::`
+      : `manual::::`;
 
-    let pagamentoId: string | null = null;
+    let pagamentoId: string | null = pagamento_id_from_body ? pagamento_id_from_body : null;
 
     if (manualIdempotencyKey) {
       const { data: existingManual, error: manualErr } = await sb
@@ -139,18 +144,20 @@ export async function POST(req: Request) {
     }
 
     if (!pagamentoId && ref_externa) {
-      const { data: existingByRef, error: refErr } = await sb
-        .from("pagamentos")
-        .select("id,status")
-        .eq("external_id", ref_externa)
-        .maybeSingle();
-      if (refErr)
-        return jsonErrorCompat("Erro ao verificar ref_externa.", 500, {
-          code: "db_error",
-          extra: { details: refErr.message },
-        });
-      if (existingByRef?.id) pagamentoId = existingByRef.id;
-    }
+  const { data: existingByRef, error: refErr } = await sb
+    .from("pagamentos")
+    .select("id,status")
+    .eq("external_id", ref_externa)
+    .maybeSingle();
+
+  if (refErr)
+    return jsonErrorCompat("Erro ao verificar ref_externa.", 500, {
+      code: "db_error",
+      extra: { details: refErr.message },
+    });
+
+  if (existingByRef?.id) pagamentoId = existingByRef.id;
+}
 
     const paidAtIso = new Date().toISOString();
 
