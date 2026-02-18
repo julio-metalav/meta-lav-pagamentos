@@ -178,6 +178,8 @@ export async function POST(req: Request) {
         return jsonErrorCompat("Erro ao criar pagamento manual.", 500, {
           code: "manual_payment_create_failed",
           extra: { details: createErr?.message },
+        });
+      }
       }
 
       pagamentoId = createdPay.id;
@@ -188,6 +190,36 @@ export async function POST(req: Request) {
         .from("pagamentos")
         .select("id,status")
         .eq("id", pagamentoId)
+        .maybeSingle();
+
+      if (curErr) {
+        return jsonErrorCompat("Erro ao ler pagamento existente.", 500, {
+          code: "db_error",
+          extra: { details: curErr.message },
+        });
+      }
+
+      const curStatus = String(currentPay?.status || "");
+
+      if (curStatus === "CRIADO") {
+        const { error: ensurePaidErr } = await sb
+          .from("pagamentos")
+          .update({ status: "PAGO", paid_at: paidAtIso })
+          .eq("id", pagamentoId)
+          .eq("status", "CRIADO");
+
+        if (ensurePaidErr) {
+          return jsonErrorCompat("Erro ao confirmar pagamento manual.", 500, {
+            code: "manual_payment_update_failed",
+            extra: { details: ensurePaidErr.message },
+          });
+        }
+      } else if (curStatus !== "PAGO") {
+        return jsonErrorCompat("Pagamento em status inválido para confirmação.", 409, {
+          code: "payment_not_confirmable",
+          extra: { pagamento_id: pagamentoId, status: curStatus },
+        });
+      }
 
     }
 
