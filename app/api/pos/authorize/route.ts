@@ -30,38 +30,66 @@ export async function POST(req: Request) {
       req.headers.get("x-correlation-id") || bodyObj.correlation_id || bodyObj.request_id || crypto.randomUUID()
     ).trim();
 
-    const parsed = parseAuthorizeInput(req, bodyObj);
-    if (!parsed.ok) {
-      return jsonErrorCompat(parsed.message, 400, { code: parsed.code });
+    // Header obrigatório: x-pos-serial
+    const headerPosSerial = String(req.headers.get("x-pos-serial") || "").trim();
+    if (!headerPosSerial) {
+      return jsonErrorCompat("x-pos-serial é obrigatório.", 400, { code: "missing_pos_serial" });
     }
 
-    const input = parsed.data;
-    const { pos_serial, identificador_local, valor_centavos, metodo, quote } = input;
+    // Campos obrigatórios no body
+    const identificador_local = String(bodyObj.identificador_local || "").trim();
+    const condominio_id = String(bodyObj.condominio_id || "").trim();
+    const valor_centavos_raw = bodyObj.valor_centavos;
+    const metodo_raw = String(bodyObj.metodo || "").trim().toUpperCase();
 
-    if (quote) {
-      const validUntilMs = Date.parse(quote.valid_until);
-      if (!Number.isFinite(validUntilMs)) {
-        return jsonErrorCompat("quote invalid", 400, { code: "invalid_quote" });
-      }
-      if (validUntilMs < Date.now()) {
-        return jsonErrorCompat("quote expired", 410, { code: "expired", retry_after_sec: 0 });
-      }
-      if (!String(quote.pricing_hash || "").startsWith("sha256:")) {
-        return jsonErrorCompat("quote integrity invalid", 400, { code: "invalid_quote_hash" });
-      }
+    if (!identificador_local) {
+      return jsonErrorCompat("identificador_local é obrigatório.", 400, { code: "missing_identificador_local" });
+    }
+    if (!condominio_id) {
+      return jsonErrorCompat("condominio_id é obrigatório.", 400, { code: "missing_condominio_id" });
+    }
+    if (!valor_centavos_raw || (typeof valor_centavos_raw !== "number" && typeof valor_centavos_raw !== "string")) {
+      return jsonErrorCompat("valor_centavos é obrigatório.", 400, { code: "missing_valor_centavos" });
+    }
+    if (!metodo_raw || (metodo_raw !== "PIX" && metodo_raw !== "CARTAO")) {
+      return jsonErrorCompat("metodo é obrigatório (PIX | CARTAO).", 400, { code: "missing_metodo" });
     }
 
-    // 1) POS Device
+    const valor_centavos = typeof valor_centavos_raw === "number" ? Math.trunc(valor_centavos_raw) : parseInt(String(valor_centavos_raw), 10);
+    if (!Number.isFinite(valor_centavos) || valor_centavos <= 0) {
+      return jsonErrorCompat("valor_centavos inválido.", 400, { code: "invalid_valor_centavos" });
+    }
+    const metodo = metodo_raw as "PIX" | "CARTAO";
+
+    // a) Buscar POS pelo x-pos-serial
     const { data: posDevice, error: posErr } = await supabase
       .from("pos_devices")
       .select("id, serial, condominio_id")
-      .eq("serial", pos_serial)
+      .eq("serial", headerPosSerial)
       .maybeSingle();
 
-    if (posErr) return jsonErrorCompat("Erro ao buscar pos_devices.", 500, { code: "db_error", extra: { details: posErr.message } });
-    if (!posDevice) return jsonErrorCompat("POS não cadastrado (pos_devices).", 401, { code: "pos_not_found" });
+    if (posErr) {
+      return jsonErrorCompat("Erro ao buscar pos_devices.", 500, {
+        code: "db_error",
+        extra: { details: posErr.message },
+      });
+    }
 
-    const condominio_id = posDevice.condominio_id;
+    // Se não existir → retornar 401
+    if (!posDevice) {
+      return jsonErrorCompat("POS não cadastrado (pos_devices).", 401, { code: "pos_not_found" });
+    }
+
+    // b) Validar que pos.condominio_id === condominio_id
+    if (posDevice.condominio_id !== condominio_id) {
+      return jsonErrorCompat("POS não pertence a este condomínio.", 403, {
+        code: "pos_condominio_mismatch",
+        extra: {
+          pos_condominio_id: posDevice.condominio_id,
+          requested_condominio_id: condominio_id,
+        },
+      });
+    }
 
     const rollout = isPosCanaryAllowed(String(condominio_id || ""));
     if (!rollout.allowed) {
@@ -84,7 +112,10 @@ export async function POST(req: Request) {
       .limit(2);
 
     if (identErr) {
-      return jsonErrorCompat("Erro ao validar identificador_local.", 500, { code: "db_error", extra: { details: identErr.message } });
+      return jsonErrorCompat("Erro ao validar identificador_local.", 500, {
+        code: "db_error",
+        extra: { details: identErr.message },
+      });
     }
 
     const activeMatches = (identMatches || []).filter((row: { ativa: boolean | null }) => !!row?.ativa);
@@ -95,34 +126,69 @@ export async function POST(req: Request) {
       });
     }
 
-    // 3) Máquina vinculada ao POS
+    // c) Buscar máquina com identificador_local, condominio_id, ativa = true
     const { data: maquina, error: maqErr } = await supabase
       .from("condominio_maquinas")
       .select("id, condominio_id, gateway_id, tipo, identificador_local, ativa, pos_device_id")
       .eq("condominio_id", condominio_id)
-      .eq("pos_device_id", posDevice.id)
       .eq("identificador_local", identificador_local)
+      .eq("ativa", true)
       .maybeSingle();
 
-    if (maqErr) return jsonErrorCompat("Erro ao buscar condominio_maquinas.", 500, { code: "db_error", extra: { details: maqErr.message } });
+    if (maqErr) {
+      return jsonErrorCompat("Erro ao buscar condominio_maquinas.", 500, {
+        code: "db_error",
+        extra: { details: maqErr.message },
+      });
+    }
+
     if (!maquina) {
-      return jsonErrorCompat("Máquina não encontrada ou não vinculada a este POS (pos_device_id).", 404, {
+      return jsonErrorCompat("Máquina não encontrada ou inativa.", 404, {
         code: "machine_not_found",
         extra: {
           condominio_id,
-          pos_device_id: posDevice.id,
           identificador_local,
         },
       });
     }
-    if (!maquina.ativa) return jsonErrorCompat("Máquina está inativa.", 409, { code: "machine_inactive" });
-    if (!maquina.gateway_id) return jsonErrorCompat("Máquina sem gateway_id vinculado.", 409, { code: "missing_gateway_id" });
 
-    // 3) Idempotência (anti retry/duplo clique)
+    // d) Validar que machine.pos_device_id === pos.id
+    if (maquina.pos_device_id !== posDevice.id) {
+      return jsonErrorCompat("Máquina não está vinculada a este POS.", 403, {
+        code: "machine_not_bound_to_pos",
+        extra: {
+          condominio_id,
+          identificador_local,
+          machine_pos_device_id: maquina.pos_device_id,
+          requested_pos_device_id: posDevice.id,
+        },
+      });
+    }
+
+    if (!maquina.gateway_id) {
+      return jsonErrorCompat("Máquina sem gateway_id vinculado.", 409, { code: "missing_gateway_id" });
+    }
+
+    // Parse quote se existir (mantém compatibilidade)
+    const quote = bodyObj.quote && typeof bodyObj.quote === "object" ? (bodyObj.quote as Record<string, unknown>) : null;
+    if (quote) {
+      const validUntilMs = Date.parse(String(quote.valid_until || ""));
+      if (!Number.isFinite(validUntilMs)) {
+        return jsonErrorCompat("quote invalid", 400, { code: "invalid_quote" });
+      }
+      if (validUntilMs < Date.now()) {
+        return jsonErrorCompat("quote expired", 410, { code: "expired", retry_after_sec: 0 });
+      }
+      if (!String(quote.pricing_hash || "").startsWith("sha256:")) {
+        return jsonErrorCompat("quote integrity invalid", 400, { code: "invalid_quote_hash" });
+      }
+    }
+
+    // Idempotência (anti retry/duplo clique)
     const minuteBucket = Math.floor(Date.now() / 60000);
     const idempotency_key =
-      input.idempotency_key ||
-      `pos:${pos_serial}:${identificador_local}:${valor_centavos}:${metodo}:${minuteBucket}`;
+      (bodyObj.idempotency_key ? String(bodyObj.idempotency_key).trim() : null) ||
+      `pos:${headerPosSerial}:${identificador_local}:${valor_centavos}:${metodo}:${minuteBucket}`;
 
     const { data: existingPay, error: existErr } = await supabase
       .from("pagamentos")
@@ -130,7 +196,12 @@ export async function POST(req: Request) {
       .eq("idempotency_key", idempotency_key)
       .maybeSingle();
 
-    if (existErr) return jsonErrorCompat("Erro ao verificar idempotency_key.", 500, { code: "db_error", extra: { details: existErr.message } });
+    if (existErr) {
+      return jsonErrorCompat("Erro ao verificar idempotency_key.", 500, {
+        code: "db_error",
+        extra: { details: existErr.message },
+      });
+    }
 
     if (existingPay) {
       return NextResponse.json({
@@ -142,7 +213,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // 4) Pagamento (PT-BR) — sem ciclo/comando nesta etapa
+    // Pagamento (PT-BR) — sem ciclo/comando nesta etapa
     const { data: pagamento, error: payErr } = await supabase
       .from("pagamentos")
       .insert({
@@ -158,7 +229,12 @@ export async function POST(req: Request) {
       .select("id, status, created_at")
       .single();
 
-    if (payErr) return jsonErrorCompat("Erro ao criar pagamento.", 500, { code: "db_error", extra: { details: payErr.message } });
+    if (payErr) {
+      return jsonErrorCompat("Erro ao criar pagamento.", 500, {
+        code: "db_error",
+        extra: { details: payErr.message },
+      });
+    }
 
     return NextResponse.json({
       ok: true,
