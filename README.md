@@ -1,5 +1,32 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Ambiente (ENV) para scripts
+
+Todos os scripts em `scripts/` exigem a variável **ENV** para evitar mistura de ambientes (local vs CI vs prod).
+
+- **ENV** deve ser um de: `local`, `ci`, `prod`.
+- O loader carrega o arquivo correspondente:
+  - `ENV=local` → `.env.local`
+  - `ENV=ci` → `.env.ci.local`
+  - `ENV=prod` → `.env.prod.local`
+
+### Exemplos
+
+```bash
+# CI (base URL padrão https://ci.metalav.com.br)
+ENV=ci node scripts/fake-gateway.mjs
+ENV=ci node scripts/e2e-iot.mjs
+
+# Local
+ENV=local node scripts/db-snapshot.mjs
+ENV=local node scripts/e2e-full.mjs
+
+# fake-gateway com fixture explícito (usa seeds de scripts/fixtures.json)
+ENV=ci node scripts/fake-gateway.mjs --fixture=ci
+```
+
+Se **ENV** não estiver definido, os scripts abortam com instrução. Crie `.env.ci.local` (e opcionalmente `.env.prod.local`) a partir de `.env.local` e ajuste valores por ambiente. Para o fake-gateway em CI, defina no `.env.ci.local` o secret do gateway, por exemplo: `IOT_HMAC_SECRET__GW_TESTE_001=...` (ou `IOT_HMAC_SECRET` global).
+
 ## Getting Started
 
 First, run the development server:

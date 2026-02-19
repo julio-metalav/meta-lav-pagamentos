@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 import { execSync } from "node:child_process";
+import { loadEnv } from "./_env.mjs";
+
+loadEnv();
 
 function run(cmd, opts = {}) {
   console.log(`\n$ ${cmd}`);

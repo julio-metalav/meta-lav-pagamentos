@@ -1,9 +1,43 @@
 #!/usr/bin/env node
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { loadEnv } from "./_env.mjs";
 
-const BASE_URL = process.env.BASE_URL || "https://ci.metalav.com.br";
-const GW_SERIAL = process.env.GW_SERIAL || "GW-FAKE-001";
-const IOT_HMAC_SECRET = process.env.IOT_HMAC_SECRET || "";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, "..");
+
+function parseFixtureArg() {
+  const i = process.argv.indexOf("--fixture");
+  if (i === -1) return null;
+  return process.argv[i + 1] || process.env.ENV || null;
+}
+
+function loadFixtures() {
+  const p = path.join(ROOT, "scripts", "fixtures.json");
+  if (!fs.existsSync(p)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+const fixtureName = parseFixtureArg() || process.env.ENV;
+const fixtures = loadFixtures();
+const fixture = fixtureName && fixtures[fixtureName] ? fixtures[fixtureName] : {};
+
+const env = loadEnv({
+  validateFakeGateway: true,
+  gwSerial: process.env.GW_SERIAL || fixture.gw_serial || "GW-FAKE-001",
+});
+
+const BASE_URL = process.env.BASE_URL || env.BASE_URL || "https://ci.metalav.com.br";
+const GW_SERIAL = process.env.GW_SERIAL || fixture.gw_serial || "GW-FAKE-001";
+const serialNorm = GW_SERIAL.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+const IOT_HMAC_SECRET =
+  process.env[`IOT_HMAC_SECRET__${serialNorm}`] || process.env.IOT_HMAC_SECRET || "";
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 2000);
 const BUSY_ON_MS = Number(process.env.BUSY_ON_MS || 7000);
 const LIMIT = Number(process.env.LIMIT || 5);
@@ -15,7 +49,9 @@ const FETCH_TIMEOUT_MS = 10_000;
 const MAX_RETRIES = 3;
 
 if (!IOT_HMAC_SECRET) {
-  console.error("[fake-gateway] Missing IOT_HMAC_SECRET environment variable. Aborting.");
+  console.error(
+    `[fake-gateway] Missing IOT_HMAC_SECRET__${serialNorm} (ou IOT_HMAC_SECRET). Defina no .env do ambiente (ex: .env.ci.local para ENV=ci).`
+  );
   process.exit(1);
 }
 

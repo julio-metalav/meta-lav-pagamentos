@@ -1,5 +1,11 @@
 import fs from "fs";
+import path from "path";
 import crypto from "crypto";
+import { fileURLToPath } from "url";
+import { loadEnv } from "./_env.mjs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, "..");
 
 function fail(msg, body) {
   console.error("\n[FAIL]", msg);
@@ -7,38 +13,28 @@ function fail(msg, body) {
   process.exit(1);
 }
 
-function loadEnvLocal() {
-  const p = ".env.local";
-  if (!fs.existsSync(p)) {
-    console.log("[env] .env.local não encontrado — usando process.env (CI mode)");
-    return;
-  }
-  const lines = fs.readFileSync(p, "utf8").split(/\r?\n/);
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    if (!/^[A-Za-z_][A-Za-z0-9_]*=/.test(line)) continue;
-    let [key, ...rest] = line.split("=");
-    let val = rest.join("=").trim();
-    // strip surrounding quotes
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    process.env[key.trim()] = val;
+function loadFixtures() {
+  const p = path.join(ROOT, "scripts", "fixtures.json");
+  if (!fs.existsSync(p)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {
+    return {};
   }
 }
 
-// Load env first (hardened)
-loadEnvLocal();
+const fixtures = loadFixtures();
+const fixture = process.env.ENV && fixtures[process.env.ENV] ? fixtures[process.env.ENV] : {};
+const env = loadEnv();
 
-const BASE = process.env.BASE_URL || "http://localhost:3000";
-const POS_SERIAL = process.env.POS_SERIAL || "POS-TESTE-001";
-const IDENTIFICADOR_LOCAL = process.env.IDENTIFICADOR_LOCAL || "LAV-01";
+const BASE = process.env.BASE_URL || env.BASE_URL || "http://localhost:3000";
+const POS_SERIAL = process.env.POS_SERIAL || fixture.pos_serial || "POS-TESTE-001";
+const IDENTIFICADOR_LOCAL = process.env.IDENTIFICADOR_LOCAL || fixture.identificador_local || "LAV-01";
 const VALOR_CENTAVOS = Number(process.env.VALOR_CENTAVOS || 1600);
 const METODO = process.env.METODO || "PIX"; // "PIX" | "CARTAO"
-const CONDOMINIO_MAQUINAS_ID = process.env.CONDOMINIO_MAQUINAS_ID || "";
+const CONDOMINIO_MAQUINAS_ID = process.env.CONDOMINIO_MAQUINAS_ID || fixture.condominio_maquinas_id || "";
 
-const GW_SERIAL = process.env.GW_SERIAL || process.env.GATEWAY_SERIAL || "GW-TESTE-001";
+const GW_SERIAL = process.env.GW_SERIAL || process.env.GATEWAY_SERIAL || fixture.gw_serial || "GW-TESTE-001";
 const GW_ID = process.env.GATEWAY_ID || "";
 
 const serialNorm = GW_SERIAL.toUpperCase().replace(/[^A-Z0-9]+/g, "_");

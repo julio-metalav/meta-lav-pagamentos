@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-import "dotenv/config";
+import { loadEnv } from "./_env.mjs";
 import { createClient } from "@supabase/supabase-js";
 
-const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const env = loadEnv();
+const url = env.SUPABASE_URL;
+const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!url || !key) {
   console.error("ERRO: faltou SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY");

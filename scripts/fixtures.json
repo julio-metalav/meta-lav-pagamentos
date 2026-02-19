@@ -1,0 +1,26 @@
+{
+  "local": {
+    "pos_serial": "POS-LAB-01",
+    "condominio_id": "",
+    "condominio_maquinas_id": "",
+    "identificador_local": "LAV-01",
+    "gw_serial": "GW-FAKE-001",
+    "gateway_id": ""
+  },
+  "ci": {
+    "pos_serial": "POS-TESTE-001",
+    "condominio_id": "",
+    "condominio_maquinas_id": "",
+    "identificador_local": "LAV-01",
+    "gw_serial": "GW-TESTE-001",
+    "gateway_id": ""
+  },
+  "prod": {
+    "pos_serial": "",
+    "condominio_id": "",
+    "condominio_maquinas_id": "",
+    "identificador_local": "",
+    "gw_serial": "",
+    "gateway_id": ""
+  }
+}

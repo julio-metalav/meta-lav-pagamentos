@@ -9,15 +9,21 @@
 //     - public.meta_enum_values (opcional, mas recomendado)
 //
 // Uso:
-//   node scripts/db-introspect.js
-//   node scripts/db-introspect.js --strict=1
+//   ENV=local node scripts/db-introspect.js
+//   ENV=ci node scripts/db-introspect.js --strict=1
 
 const fs = require("fs");
 const path = require("path");
 const yaml = require("js-yaml");
 const { createClient } = require("@supabase/supabase-js");
 
-require("dotenv").config({ path: path.join(process.cwd(), ".env.local") });
+const ENV = process.env.ENV;
+if (!ENV || !["local", "ci", "prod"].includes(ENV)) {
+  console.error("ENV é obrigatório: local, ci ou prod. Ex: ENV=local node scripts/db-introspect.js");
+  process.exit(1);
+}
+const envFile = ENV === "local" ? ".env.local" : ENV === "ci" ? ".env.ci.local" : ".env.prod.local";
+require("dotenv").config({ path: path.join(process.cwd(), envFile) });
 require("dotenv").config({ path: path.join(process.cwd(), ".env") });
 
 function arg(name, fallback = null) {

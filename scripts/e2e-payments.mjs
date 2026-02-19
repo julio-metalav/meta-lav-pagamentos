@@ -1,12 +1,33 @@
 #!/usr/bin/env node
 import crypto from "node:crypto";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+import { loadEnv } from "./_env.mjs";
 
-const BASE = process.env.BASE_URL || "http://localhost:3000";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, "..");
 
-const POS_SERIAL = process.env.POS_SERIAL || "";
-const IDENTIFICADOR_LOCAL = process.env.IDENTIFICADOR_LOCAL || "";
-const CONDOMINIO_ID = process.env.CONDOMINIO_ID || "";
-const CONDOMINIO_MAQUINAS_ID = process.env.CONDOMINIO_MAQUINAS_ID || "";
+function loadFixtures() {
+  const p = path.join(ROOT, "scripts", "fixtures.json");
+  if (!fs.existsSync(p)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+const fixtures = loadFixtures();
+const fixture = process.env.ENV && fixtures[process.env.ENV] ? fixtures[process.env.ENV] : {};
+const env = loadEnv();
+
+const BASE = process.env.BASE_URL || env.BASE_URL || "http://localhost:3000";
+
+const POS_SERIAL = process.env.POS_SERIAL || fixture.pos_serial || "";
+const IDENTIFICADOR_LOCAL = process.env.IDENTIFICADOR_LOCAL || fixture.identificador_local || "";
+const CONDOMINIO_ID = process.env.CONDOMINIO_ID || fixture.condominio_id || "";
+const CONDOMINIO_MAQUINAS_ID = process.env.CONDOMINIO_MAQUINAS_ID || fixture.condominio_maquinas_id || "";
 
 const required = [
   ["POS_SERIAL", POS_SERIAL],

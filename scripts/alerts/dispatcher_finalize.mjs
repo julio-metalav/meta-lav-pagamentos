@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 
-import dotenv from "dotenv";
+import { loadEnv } from "../_env.mjs";
 import { createClient } from "@supabase/supabase-js";
 
-dotenv.config({ path: new URL("../../.env.local", import.meta.url).pathname, quiet: true });
-
-const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const env = loadEnv();
+const url = env.SUPABASE_URL;
+const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!url || !key) {
   console.log(JSON.stringify({ ok: false, error: "missing_supabase_env" }));

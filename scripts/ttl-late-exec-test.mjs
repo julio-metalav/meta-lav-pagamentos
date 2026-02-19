@@ -1,4 +1,7 @@
-const BASE = process.env.BASE_URL || "http://127.0.0.1:3000";
+import { loadEnv } from "./_env.mjs";
+
+const env = loadEnv();
+const BASE = process.env.BASE_URL || env.BASE_URL || "http://127.0.0.1:3000";
 const TTL_WAIT_MS = 35_000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -1,7 +1,28 @@
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { loadEnv } from "./_env.mjs";
 
-const BASE = process.env.BASE_URL || "http://localhost:3000";
-const serial = process.env.GW_SERIAL || "GW-TESTE-001";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, "..");
+
+function loadFixtures() {
+  const p = path.join(ROOT, "scripts", "fixtures.json");
+  if (!fs.existsSync(p)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+const fixtures = loadFixtures();
+const fixture = process.env.ENV && fixtures[process.env.ENV] ? fixtures[process.env.ENV] : {};
+const env = loadEnv();
+
+const BASE = process.env.BASE_URL || env.BASE_URL || "http://localhost:3000";
+const serial = process.env.GW_SERIAL || fixture.gw_serial || "GW-TESTE-001";
 
 const serialNorm = serial.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
 const secret =
@@ -10,7 +31,7 @@ const secret =
   "";
 
 if (!secret) {
-  console.error("Faltou secret. Defina IOT_HMAC_SECRET__" + serialNorm + " ou IOT_HMAC_SECRET.");
+  console.error("Faltou secret. Defina IOT_HMAC_SECRET__" + serialNorm + " ou IOT_HMAC_SECRET no .env do ambiente.");
   process.exit(1);
 }
 

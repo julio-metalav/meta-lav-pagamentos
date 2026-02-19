@@ -17,21 +17,16 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
-import dotenv from "dotenv";
+import { loadEnv } from "./_env.mjs";
 import { createClient } from "@supabase/supabase-js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = process.cwd();
 
-const envPaths = [path.join(ROOT, ".env.local"), path.join(ROOT, ".env")];
-envPaths.forEach((p) => {
-  if (fs.existsSync(p)) dotenv.config({ path: p });
-});
-
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+const env = loadEnv();
+const SUPABASE_URL = env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SUPABASE_URL) {
   console.error("❌ Faltou SUPABASE_URL (ou NEXT_PUBLIC_SUPABASE_URL)");
