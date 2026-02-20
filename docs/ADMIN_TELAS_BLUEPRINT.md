@@ -132,6 +132,6 @@ Cadastrar máquina e vincular de forma íntegra com gateway + POS.
 
 ## 7) Critérios de aceite
 - Não existe máquina ativa sem gateway/POS.
-- Não existe gateway ativo vinculado a mais de uma máquina.
+- Não existe gateway vinculado a mais de uma máquina.
 - `authorize` só funciona para máquina vinculada ao POS correto.
 - Fluxo canônico permanece verde após cadastros via admin.

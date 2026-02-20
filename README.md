@@ -25,7 +25,7 @@ ENV=local node scripts/e2e-full.mjs
 ENV=ci node scripts/fake-gateway.mjs --fixture=ci
 ```
 
-Se **ENV** não estiver definido, os scripts abortam com instrução. Crie `.env.ci.local` (e opcionalmente `.env.prod.local`) a partir de `.env.local` e ajuste valores por ambiente. Para o fake-gateway em CI, defina no `.env.ci.local` o secret do gateway, por exemplo: `IOT_HMAC_SECRET__GW_TESTE_001=...` (ou `IOT_HMAC_SECRET` global).
+Se **ENV** não estiver definido, os scripts abortam com instrução. Crie `.env.ci.local` (e opcionalmente `.env.prod.local`) a partir de `.env.local` e ajuste valores por ambiente. Para o fake-gateway em CI, defina no `.env.ci.local` o secret do gateway, por exemplo: `IOT_HMAC_SECRET__GW_TESTE_001=...` (ou `IOT_HMAC_SECRET` global). Em `scripts/fixtures.json` os ambientes podem ter `condominio_id`/`condominio_maquinas_id` vazios; nesse caso os scripts usam as variáveis de ambiente com os mesmos nomes.
 
 ## Getting Started
 

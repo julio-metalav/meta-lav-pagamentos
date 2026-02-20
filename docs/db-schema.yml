@@ -6,7 +6,7 @@ meta:
   project: "meta-lav-pagamentos"
   timezone: "UTC"
   source_of_truth: "pt-br"
-  last_updated: "2026-02-05"
+  last_updated: "2026-02-19"
 
 conventions:
   canonical_schema: "public"
@@ -201,6 +201,51 @@ tables:
 
       paid_at: { type: "timestamptz", required: false }
       created_at: { type: "timestamptz", required: true }
+
+  precos_ciclo:
+    canonical: true
+    runtime: true
+    table: "precos_ciclo"
+    purpose: "Preço vigente por máquina (histórico por vigência)"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      maquina_id: { type: "uuid", required: true }
+      valor_centavos: { type: "int", required: true }
+      vigente_desde: { type: "timestamptz", required: true }
+      vigente_ate: { type: "timestamptz", required: false }
+      created_at: { type: "timestamptz", required: true }
+
+  condominios:
+    canonical: true
+    runtime: true
+    table: "condominios"
+    purpose: "Condomínios (admin e FK em gateways/maquinas/kits)"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      nome: { type: "text", required: true }
+      cidade: { type: "text", required: true }
+      uf: { type: "text", required: true }
+      ativo: { type: "bool", required: true }
+      codigo_condominio: { type: "text", required: false }
+      created_at: { type: "timestamptz", required: true }
+      updated_at: { type: "timestamptz", required: true }
+
+  kits_operacionais:
+    canonical: true
+    runtime: true
+    table: "kits_operacionais"
+    purpose: "Kit POS + Gateway por condomínio (associação operacional)"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      condominio_id: { type: "uuid", required: true }
+      nome_kit: { type: "text", required: true }
+      pos_device_id: { type: "uuid", required: true }
+      gateway_id: { type: "uuid", required: true }
+      ativo: { type: "bool", required: false }
+      created_at: { type: "timestamptz", required: false }
 
   # ============================
   # LEGADO (EN) — READ ONLY

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# LEGACY: este script não usa ENV nem scripts/_env.mjs.
+# Forma canônica: ENV=local node scripts/smoke.mjs (ou ENV=ci para CI).
+
 # Load .env.local if present (safe KEY=VALUE parser)
 LOADED_ENV_KEYS=()
 if [[ -f .env.local ]]; then
