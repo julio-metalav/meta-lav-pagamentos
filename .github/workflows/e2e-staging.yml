@@ -103,6 +103,7 @@ jobs:
 
       - name: Build
         run: npm run build
-
       - name: Run E2E FULL against Staging
-      run: node scripts/e2e-full.mjs
+        env:
+          ENV: ci
+        run: node scripts/e2e-full.mjs
