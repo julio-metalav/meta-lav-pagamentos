@@ -6,6 +6,13 @@ import { jsonErrorCompat } from "@/lib/api/errors";
 import { parseAuthorizeInput } from "@/lib/payments/contracts";
 import { isPosCanaryAllowed } from "@/lib/payments/rollout";
 
+const NEXUS_COMMIT = process.env.VERCEL_GIT_COMMIT_SHA ?? "unknown";
+
+function withCommitHeader(res: NextResponse): NextResponse {
+  res.headers.set("x-nexus-commit", NEXUS_COMMIT);
+  return res;
+}
+
 /**
  * Meta-Lav Pagamentos — POS Authorize
  *
@@ -33,7 +40,7 @@ export async function POST(req: Request) {
     // Header obrigatório: x-pos-serial
     const headerPosSerial = String(req.headers.get("x-pos-serial") || "").trim();
     if (!headerPosSerial) {
-      return jsonErrorCompat("x-pos-serial é obrigatório.", 400, { code: "missing_pos_serial" });
+      return withCommitHeader(jsonErrorCompat("x-pos-serial é obrigatório.", 400, { code: "missing_pos_serial" }));
     }
 
     // Campos obrigatórios no body
@@ -43,21 +50,21 @@ export async function POST(req: Request) {
     const metodo_raw = String(bodyObj.metodo || "").trim().toUpperCase();
 
     if (!identificador_local) {
-      return jsonErrorCompat("identificador_local é obrigatório.", 400, { code: "missing_identificador_local" });
+      return withCommitHeader(jsonErrorCompat("identificador_local é obrigatório.", 400, { code: "missing_identificador_local" }));
     }
     if (!condominio_id) {
-      return jsonErrorCompat("condominio_id é obrigatório.", 400, { code: "missing_condominio_id" });
+      return withCommitHeader(jsonErrorCompat("condominio_id é obrigatório.", 400, { code: "missing_condominio_id" }));
     }
     if (!valor_centavos_raw || (typeof valor_centavos_raw !== "number" && typeof valor_centavos_raw !== "string")) {
-      return jsonErrorCompat("valor_centavos é obrigatório.", 400, { code: "missing_valor_centavos" });
+      return withCommitHeader(jsonErrorCompat("valor_centavos é obrigatório.", 400, { code: "missing_valor_centavos" }));
     }
     if (!metodo_raw || (metodo_raw !== "PIX" && metodo_raw !== "CARTAO")) {
-      return jsonErrorCompat("metodo é obrigatório (PIX | CARTAO).", 400, { code: "missing_metodo" });
+      return withCommitHeader(jsonErrorCompat("metodo é obrigatório (PIX | CARTAO).", 400, { code: "missing_metodo" }));
     }
 
     const valor_centavos = typeof valor_centavos_raw === "number" ? Math.trunc(valor_centavos_raw) : parseInt(String(valor_centavos_raw), 10);
     if (!Number.isFinite(valor_centavos) || valor_centavos <= 0) {
-      return jsonErrorCompat("valor_centavos inválido.", 400, { code: "invalid_valor_centavos" });
+      return withCommitHeader(jsonErrorCompat("valor_centavos inválido.", 400, { code: "invalid_valor_centavos" }));
     }
     const metodo = metodo_raw as "PIX" | "CARTAO";
 
@@ -69,38 +76,38 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (posErr) {
-      return jsonErrorCompat("Erro ao buscar pos_devices.", 500, {
+      return withCommitHeader(jsonErrorCompat("Erro ao buscar pos_devices.", 500, {
         code: "db_error",
         extra: { details: posErr.message },
-      });
+      }));
     }
 
     // Se não existir → retornar 401
     if (!posDevice) {
-      return jsonErrorCompat("POS não cadastrado (pos_devices).", 401, { code: "pos_not_found" });
+      return withCommitHeader(jsonErrorCompat("POS não cadastrado (pos_devices).", 401, { code: "pos_not_found" }));
     }
 
     // b) Validar que pos.condominio_id === condominio_id
     if (posDevice.condominio_id !== condominio_id) {
-      return jsonErrorCompat("POS não pertence a este condomínio.", 403, {
+      return withCommitHeader(jsonErrorCompat("POS não pertence a este condomínio.", 403, {
         code: "pos_condominio_mismatch",
         extra: {
           pos_condominio_id: posDevice.condominio_id,
           requested_condominio_id: condominio_id,
         },
-      });
+      }));
     }
 
     const rollout = isPosCanaryAllowed(String(condominio_id || ""));
     if (!rollout.allowed) {
-      return jsonErrorCompat("POS authorize indisponível para este condomínio (canary).", 403, {
+      return withCommitHeader(jsonErrorCompat("POS authorize indisponível para este condomínio (canary).", 403, {
         code: "canary_not_allowed",
         extra: {
           condominio_id,
           canary_mode: rollout.mode,
           canary_reason: rollout.reason,
         },
-      });
+      }));
     }
 
     // 2) Validação de identificador duplicado (mesmo condominio)
@@ -112,18 +119,18 @@ export async function POST(req: Request) {
       .limit(2);
 
     if (identErr) {
-      return jsonErrorCompat("Erro ao validar identificador_local.", 500, {
+      return withCommitHeader(jsonErrorCompat("Erro ao validar identificador_local.", 500, {
         code: "db_error",
         extra: { details: identErr.message },
-      });
+      }));
     }
 
     const activeMatches = (identMatches || []).filter((row: { ativa: boolean | null }) => !!row?.ativa);
     if (activeMatches.length > 1) {
-      return jsonErrorCompat("identificador_local duplicado no condomínio.", 409, {
+      return withCommitHeader(jsonErrorCompat("identificador_local duplicado no condomínio.", 409, {
         code: "duplicate_machine_identifier",
         extra: { condominio_id, identificador_local },
-      });
+      }));
     }
 
     // c) Buscar máquina com identificador_local, condominio_id, ativa = true
@@ -136,25 +143,25 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (maqErr) {
-      return jsonErrorCompat("Erro ao buscar condominio_maquinas.", 500, {
+      return withCommitHeader(jsonErrorCompat("Erro ao buscar condominio_maquinas.", 500, {
         code: "db_error",
         extra: { details: maqErr.message },
-      });
+      }));
     }
 
     if (!maquina) {
-      return jsonErrorCompat("Máquina não encontrada ou inativa.", 404, {
+      return withCommitHeader(jsonErrorCompat("Máquina não encontrada ou inativa.", 404, {
         code: "machine_not_found",
         extra: {
           condominio_id,
           identificador_local,
         },
-      });
+      }));
     }
 
     // d) Validar que machine.pos_device_id === pos.id
     if (maquina.pos_device_id !== posDevice.id) {
-      return jsonErrorCompat("Máquina não está vinculada a este POS.", 403, {
+      return withCommitHeader(jsonErrorCompat("Máquina não está vinculada a este POS.", 403, {
         code: "machine_not_bound_to_pos",
         extra: {
           condominio_id,
@@ -162,11 +169,11 @@ export async function POST(req: Request) {
           machine_pos_device_id: maquina.pos_device_id,
           requested_pos_device_id: posDevice.id,
         },
-      });
+      }));
     }
 
     if (!maquina.gateway_id) {
-      return jsonErrorCompat("Máquina sem gateway_id vinculado.", 409, { code: "missing_gateway_id" });
+      return withCommitHeader(jsonErrorCompat("Máquina sem gateway_id vinculado.", 409, { code: "missing_gateway_id" }));
     }
 
     // Parse quote se existir (mantém compatibilidade)
@@ -174,13 +181,13 @@ export async function POST(req: Request) {
     if (quote) {
       const validUntilMs = Date.parse(String(quote.valid_until || ""));
       if (!Number.isFinite(validUntilMs)) {
-        return jsonErrorCompat("quote invalid", 400, { code: "invalid_quote" });
+        return withCommitHeader(jsonErrorCompat("quote invalid", 400, { code: "invalid_quote" }));
       }
       if (validUntilMs < Date.now()) {
-        return jsonErrorCompat("quote expired", 410, { code: "expired", retry_after_sec: 0 });
+        return withCommitHeader(jsonErrorCompat("quote expired", 410, { code: "expired", retry_after_sec: 0 }));
       }
       if (!String(quote.pricing_hash || "").startsWith("sha256:")) {
-        return jsonErrorCompat("quote integrity invalid", 400, { code: "invalid_quote_hash" });
+        return withCommitHeader(jsonErrorCompat("quote integrity invalid", 400, { code: "invalid_quote_hash" }));
       }
     }
 
@@ -197,20 +204,20 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (existErr) {
-      return jsonErrorCompat("Erro ao verificar idempotency_key.", 500, {
+      return withCommitHeader(jsonErrorCompat("Erro ao verificar idempotency_key.", 500, {
         code: "db_error",
         extra: { details: existErr.message },
-      });
+      }));
     }
 
     if (existingPay) {
-      return NextResponse.json({
+      return withCommitHeader(NextResponse.json({
         ok: true,
         reused: true,
         correlation_id,
         pagamento_id: existingPay.id,
         pagamento_status: existingPay.status,
-      });
+      }));
     }
 
     // Pagamento (PT-BR) — sem ciclo/comando nesta etapa
@@ -230,24 +237,24 @@ export async function POST(req: Request) {
       .single();
 
     if (payErr) {
-      return jsonErrorCompat("Erro ao criar pagamento.", 500, {
+      return withCommitHeader(jsonErrorCompat("Erro ao criar pagamento.", 500, {
         code: "db_error",
         extra: { details: payErr.message },
-      });
+      }));
     }
 
-    return NextResponse.json({
+    return withCommitHeader(NextResponse.json({
       ok: true,
       reused: false,
       correlation_id,
       pagamento_id: pagamento.id,
       pagamento_status: pagamento.status,
-    });
+    }));
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return jsonErrorCompat("Erro inesperado no authorize.", 500, {
+    return withCommitHeader(jsonErrorCompat("Erro inesperado no authorize.", 500, {
       code: "internal_error",
       extra: { details: msg },
-    });
+    }));
   }
 }
