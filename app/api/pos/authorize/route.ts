@@ -43,9 +43,31 @@ export async function POST(req: Request) {
       return withCommitHeader(jsonErrorCompat("x-pos-serial é obrigatório.", 400, { code: "missing_pos_serial" }));
     }
 
-    // Campos obrigatórios no body
+    // a) Buscar POS pelo x-pos-serial (cedo para poder derivar condominio_id quando omitido no body)
+    const { data: posDevice, error: posErr } = await supabase
+      .from("pos_devices")
+      .select("id, serial, condominio_id")
+      .eq("serial", headerPosSerial)
+      .maybeSingle();
+
+    if (posErr) {
+      return withCommitHeader(jsonErrorCompat("Erro ao buscar pos_devices.", 500, {
+        code: "db_error",
+        extra: { details: posErr.message },
+      }));
+    }
+
+    if (!posDevice) {
+      return withCommitHeader(jsonErrorCompat("POS não cadastrado (pos_devices).", 401, { code: "pos_not_found" }));
+    }
+
+    // Campos obrigatórios no body; condominio_id pode ser omitido e derivado do POS (útil em dev)
     const identificador_local = String(bodyObj.identificador_local || "").trim();
-    const condominio_id = String(bodyObj.condominio_id || "").trim();
+    const condominio_id = String(
+      bodyObj.condominio_id !== undefined && bodyObj.condominio_id !== null && bodyObj.condominio_id !== ""
+        ? bodyObj.condominio_id
+        : posDevice.condominio_id ?? ""
+    ).trim();
     const valor_centavos_raw = bodyObj.valor_centavos;
     const metodo_raw = String(bodyObj.metodo || "").trim().toUpperCase();
 
@@ -53,7 +75,7 @@ export async function POST(req: Request) {
       return withCommitHeader(jsonErrorCompat("identificador_local é obrigatório.", 400, { code: "missing_identificador_local" }));
     }
     if (!condominio_id) {
-      return withCommitHeader(jsonErrorCompat("condominio_id é obrigatório.", 400, { code: "missing_condominio_id" }));
+      return withCommitHeader(jsonErrorCompat("condominio_id é obrigatório (ou cadastre o POS em pos_devices com condominio_id).", 400, { code: "missing_condominio_id" }));
     }
     if (!valor_centavos_raw || (typeof valor_centavos_raw !== "number" && typeof valor_centavos_raw !== "string")) {
       return withCommitHeader(jsonErrorCompat("valor_centavos é obrigatório.", 400, { code: "missing_valor_centavos" }));
@@ -68,26 +90,7 @@ export async function POST(req: Request) {
     }
     const metodo = metodo_raw as "PIX" | "CARTAO";
 
-    // a) Buscar POS pelo x-pos-serial
-    const { data: posDevice, error: posErr } = await supabase
-      .from("pos_devices")
-      .select("id, serial, condominio_id")
-      .eq("serial", headerPosSerial)
-      .maybeSingle();
-
-    if (posErr) {
-      return withCommitHeader(jsonErrorCompat("Erro ao buscar pos_devices.", 500, {
-        code: "db_error",
-        extra: { details: posErr.message },
-      }));
-    }
-
-    // Se não existir → retornar 401
-    if (!posDevice) {
-      return withCommitHeader(jsonErrorCompat("POS não cadastrado (pos_devices).", 401, { code: "pos_not_found" }));
-    }
-
-    // b) Validar que pos.condominio_id === condominio_id
+    // b) Validar que pos.condominio_id === condominio_id (já garantido se veio do POS)
     if (posDevice.condominio_id !== condominio_id) {
       return withCommitHeader(jsonErrorCompat("POS não pertence a este condomínio.", 403, {
         code: "pos_condominio_mismatch",

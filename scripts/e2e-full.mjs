@@ -218,14 +218,18 @@ async function callFinancial() {
     return callManualConfirmFlow();
   }
   if (!CONDOMINIO_MAQUINAS_ID) fail("Env CONDOMINIO_MAQUINAS_ID é obrigatório");
-  // 1) authorize
+  // 1) authorize (x-pos-serial é header obrigatório)
   console.log("\n[authorize] calling /api/pos/authorize...");
-  const auth = await callJson("/api/pos/authorize", "POST", {
-    pos_serial: POS_SERIAL,
-    identificador_local: IDENTIFICADOR_LOCAL,
-    valor_centavos: VALOR_CENTAVOS,
-    metodo: METODO,
-  });
+  const auth = await callJson(
+    "/api/pos/authorize",
+    "POST",
+    {
+      identificador_local: IDENTIFICADOR_LOCAL,
+      valor_centavos: VALOR_CENTAVOS,
+      metodo: METODO,
+    },
+    { headers: { "x-pos-serial": POS_SERIAL } }
+  );
   console.log("[authorize] status=", auth.status, auth.text);
   if (auth.status < 200 || auth.status >= 300 || !auth.json?.pagamento_id) fail("authorize falhou", auth.text);
   const pagamento_id = String(auth.json.pagamento_id);
