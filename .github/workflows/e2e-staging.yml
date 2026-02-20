@@ -26,9 +26,11 @@ jobs:
       - name: Registry check (canonical tables)
         run: npm run registry:check
 
-      - name: Write .env.ci.local for CI
+      - name: Write env files for CI (.env.local + .env.ci.local)
         run: |
-          cat > .env.ci.local << 'EOF'
+          write_env() {
+            local f="$1"
+            cat > "$f" << 'EOF'
           # CI generated
           ENV=ci
           BASE_URL=${{ secrets.STAGING_BASE_URL }}
@@ -44,6 +46,9 @@ jobs:
           IOT_HMAC_SECRET__GW_TESTE_001=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
           INTERNAL_MANUAL_TOKEN=${{ secrets.INTERNAL_MANUAL_TOKEN }}
           EOF
+          }
+          write_env .env.local
+          write_env .env.ci.local
 
       - name: Prefer CI BASE_URL if present (safe)
         shell: bash
@@ -51,6 +56,7 @@ jobs:
           set -e
           ci="${{ secrets.STAGING_CI_BASE_URL }}"
           if [ -n "$ci" ]; then
+            sed -i -E "s|^BASE_URL=.*|BASE_URL=$ci|g" .env.local
             sed -i -E "s|^BASE_URL=.*|BASE_URL=$ci|g" .env.ci.local
             echo "Using CI BASE_URL"
           else
@@ -61,19 +67,21 @@ jobs:
         shell: bash
         run: |
           set -e
-          base=$(grep -E '^BASE_URL=' .env.ci.local | head -n1 | cut -d= -f2-)
+          base=$(grep -E '^BASE_URL=' .env.local | head -n1 | cut -d= -f2-)
           host=$(echo "$base" | sed -E 's#^https?://##' | cut -d/ -f1)
           echo "BASE_URL_HOST=$host"
 
-      - name: Verify .env.ci.local
+      - name: Verify .env files
         run: |
+          test -f .env.local || (echo "missing .env.local" && exit 1)
           test -f .env.ci.local || (echo "missing .env.ci.local" && exit 1)
+          echo ".env.local present" && wc -c .env.local
           echo ".env.ci.local present" && wc -c .env.ci.local
 
       - name: Pre-validate required env
         run: |
           set -e
-          . ./.env.ci.local || true
+          . ./.env.local || true
           require() { v="$1"; eval "val=\${$v:-}"; if [ -z "$val" ]; then echo "MISSING: $v"; exit 1; else echo "OK: $v"; fi; }
           require ENV
           require BASE_URL
