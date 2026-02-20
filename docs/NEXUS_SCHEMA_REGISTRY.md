@@ -24,7 +24,7 @@ Registro comparativo de tabelas: **canônico** (`docs/db-schema.yml`), **snapsho
 | alert_routes | Não | Não | Sim | Fora do canônico e do snapshot; só código (alertas). |
 | ciclos | Sim | Sim | Sim | — |
 | condominio_maquinas | Sim | Sim | Sim | — |
-| condominios | Sim | Não | Sim | Snapshot CI não inclui; canônico preenchido (id, nome). |
+| condominios | Sim | Não | Sim | Snapshot do repo não confirma (ausente/desatualizado); canônico alinhado ao Supabase CI. |
 | eventos_iot | Sim | Sim | Sim | — |
 | gateways | Sim | Sim | Sim | — |
 | iot_commands | Sim | Sim | Sim | — |

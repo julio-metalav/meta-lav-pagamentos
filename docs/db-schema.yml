@@ -248,11 +248,190 @@ tables:
       created_at: { type: "timestamptz", required: false }
 
   # ============================
+  # ADMIN / ALERTAS
+  # ============================
+
+  admin_users:
+    canonical: true
+    runtime: true
+    table: "admin_users"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      email: { type: "text", required: true }
+      name: { type: "text", required: false }
+      enabled: { type: "bool", required: true }
+      status: { type: "text", required: true }
+      password_hash: { type: "text", required: false }
+      created_at: { type: "timestamptz", required: true }
+      updated_at: { type: "timestamptz", required: true }
+      last_login_at: { type: "timestamptz", required: false }
+
+  admin_roles:
+    canonical: true
+    runtime: true
+    table: "admin_roles"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      code: { type: "text", required: true }
+      name: { type: "text", required: true }
+      created_at: { type: "timestamptz", required: true }
+
+  admin_permissions:
+    canonical: true
+    runtime: true
+    table: "admin_permissions"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      code: { type: "text", required: true }
+      name: { type: "text", required: true }
+      created_at: { type: "timestamptz", required: true }
+
+  admin_user_roles:
+    canonical: true
+    runtime: true
+    table: "admin_user_roles"
+    primary_key: ["user_id", "role_id"]
+    columns:
+      user_id: { type: "uuid", required: true }
+      role_id: { type: "uuid", required: true }
+      created_at: { type: "timestamptz", required: true }
+
+  admin_role_permissions:
+    canonical: true
+    runtime: true
+    table: "admin_role_permissions"
+    primary_key: ["role_id", "permission_id"]
+    columns:
+      role_id: { type: "uuid", required: true }
+      permission_id: { type: "uuid", required: true }
+      created_at: { type: "timestamptz", required: true }
+
+  admin_user_permissions:
+    canonical: true
+    runtime: true
+    table: "admin_user_permissions"
+    primary_key: ["user_id", "permission_id"]
+    columns:
+      user_id: { type: "uuid", required: true }
+      permission_id: { type: "uuid", required: true }
+      allowed: { type: "bool", required: true }
+      created_at: { type: "timestamptz", required: true }
+      updated_at: { type: "timestamptz", required: true }
+
+  admin_auth_tokens:
+    canonical: true
+    runtime: true
+    table: "admin_auth_tokens"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      user_id: { type: "uuid", required: true }
+      type: { type: "text", required: true }
+      token_hash: { type: "text", required: true }
+      expires_at: { type: "timestamptz", required: true }
+      used_at: { type: "timestamptz", required: false }
+      created_at: { type: "timestamptz", required: true }
+      created_by: { type: "uuid", required: false }
+
+  admin_audit_log:
+    canonical: true
+    runtime: true
+    table: "admin_audit_log"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      actor_user_id: { type: "uuid", required: false }
+      action: { type: "text", required: true }
+      target_user_id: { type: "uuid", required: false }
+      meta: { type: "jsonb", required: true }
+      created_at: { type: "timestamptz", required: true }
+
+  alert_routes:
+    canonical: true
+    runtime: true
+    table: "alert_routes"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      enabled: { type: "bool", required: true }
+      event_code: { type: "text", required: true }
+      channel: { type: "text", required: true }
+      target: { type: "text", required: true }
+      severity_min: { type: "text", required: true }
+      dedupe_window_sec: { type: "int", required: true }
+      created_at: { type: "timestamptz", required: true }
+      updated_at: { type: "timestamptz", required: true }
+
+  alert_outbox:
+    canonical: true
+    runtime: true
+    table: "alert_outbox"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      event_code: { type: "text", required: true }
+      severity: { type: "text", required: true }
+      fingerprint: { type: "text", required: true }
+      channel: { type: "text", required: true }
+      target: { type: "text", required: true }
+      text: { type: "text", required: true }
+      status: { type: "text", required: true }
+      attempts: { type: "int", required: true }
+      last_error: { type: "text", required: false }
+      created_at: { type: "timestamptz", required: true }
+      updated_at: { type: "timestamptz", required: true }
+      sent_at: { type: "timestamptz", required: false }
+
+  alert_dispatch_log:
+    canonical: true
+    runtime: true
+    table: "alert_dispatch_log"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      event_code: { type: "text", required: true }
+      severity: { type: "text", required: true }
+      fingerprint: { type: "text", required: true }
+      channel: { type: "text", required: true }
+      target: { type: "text", required: true }
+      status: { type: "text", required: true }
+      error: { type: "text", required: false }
+      sent_at: { type: "timestamptz", required: true }
+
+  alert_dlq:
+    canonical: true
+    runtime: true
+    table: "alert_dlq"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      event_code: { type: "text", required: true }
+      severity: { type: "text", required: true }
+      channel: { type: "text", required: true }
+      target: { type: "text", required: true }
+      payload: { type: "jsonb", required: true }
+      fingerprint: { type: "text", required: true }
+      error: { type: "text", required: true }
+      attempts: { type: "int", required: true }
+      status: { type: "text", required: true }
+      first_failed_at: { type: "timestamptz", required: true }
+      last_failed_at: { type: "timestamptz", required: true }
+      next_retry_at: { type: "timestamptz", required: true }
+      resolved_at: { type: "timestamptz", required: false }
+      resolved_by: { type: "text", required: false }
+      notes: { type: "text", required: false }
+      created_at: { type: "timestamptz", required: true }
+      updated_at: { type: "timestamptz", required: true }
+
+  # ============================
   # LEGADO (EN) — READ ONLY
   # ============================
 
   iot_eventos:
-    canonical: false
+    canonical: true
     runtime: false
     read_only: true
     table: "iot_eventos"
