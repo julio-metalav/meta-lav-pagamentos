@@ -11,7 +11,8 @@
     "hardening": "node scripts/hardening.js",
     "check": "npm run anti-legado && npm run hardening",
     "smoke": "node scripts/smoke.mjs",
-    "registry:check": "node scripts/registry-check.mjs"
+    "registry:check": "node scripts/registry-check.mjs",
+    "enum:check": "node scripts/enum-check.mjs"
   },
   "dependencies": {
     "next": "16.1.5",
