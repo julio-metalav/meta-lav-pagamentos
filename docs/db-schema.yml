@@ -84,6 +84,7 @@ tables:
       id: { type: "uuid", required: true }
       gateway_id: { type: "uuid", required: true }
       cmd_id: { type: "uuid", required: true }
+      pagamento_id: { type: "uuid", required: false }
       status: { type: "text", required: true }
       tipo: { type: "text", required: false }
       payload: { type: "jsonb", required: true }
@@ -106,6 +107,7 @@ tables:
       id: { type: "uuid", required: true }
       condominio_id: { type: "uuid", required: true }
       gateway_id: { type: "uuid", required: true }
+      kit_id: { type: "uuid", required: false }
       identificador_local: { type: "text", required: true }
       tipo: { type: "tipo_maquina", required: true }
       ativa: { type: "bool", required: false }
