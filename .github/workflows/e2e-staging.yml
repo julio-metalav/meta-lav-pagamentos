@@ -26,7 +26,7 @@ jobs:
       - name: Registry check (canonical tables)
         run: npm run registry:check
 
-      - name: Write env files for CI (.env.local + .env.ci.local)
+      -       - name: Write env files for CI (.env.local + .env.ci.local)
         run: |
           write_env() {
             local f="$1"
@@ -49,7 +49,7 @@ jobs:
           }
           write_env .env.local
           write_env .env.ci.local
-
+          
       - name: Prefer CI BASE_URL if present (safe)
         shell: bash
         run: |
