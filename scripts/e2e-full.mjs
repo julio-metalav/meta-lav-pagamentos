@@ -240,6 +240,7 @@ async function callFinancial() {
     pos_serial: xPosSerialValue,
     identificador_local: IDENTIFICADOR_LOCAL,
     metodo: METODO,
+    valor_centavos: VALOR_CENTAVOS,
   };
   if (CONDOMINIO_ID) authBody.condominio_id = CONDOMINIO_ID;
   const auth = await callJson("/api/pos/authorize", "POST", authBody, {
