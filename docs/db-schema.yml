@@ -249,6 +249,27 @@ tables:
       ativo: { type: "bool", required: false }
       created_at: { type: "timestamptz", required: false }
 
+  condominio_precos:
+    canonical: true
+    runtime: true
+    table: "condominio_precos"
+    purpose: "Precificação por máquina e canal (POS/APP) com vigência a partir de"
+    primary_key: ["id"]
+    enums:
+      canal:
+        enum_name: "preco_canal"
+        values:
+          - "POS"
+          - "APP"
+    columns:
+      id: { type: "uuid", required: true }
+      condominio_maquina_id: { type: "uuid", required: true }
+      canal: { type: "preco_canal", required: true }
+      valor_centavos: { type: "int", required: true }
+      vigente_a_partir: { type: "timestamptz", required: true }
+      created_at: { type: "timestamptz", required: true }
+      created_by: { type: "uuid", required: true }
+
   # ============================
   # ADMIN / ALERTAS
   # ============================

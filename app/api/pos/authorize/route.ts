@@ -36,10 +36,9 @@ export async function POST(req: Request) {
       return jsonErrorCompat("x-pos-serial é obrigatório.", 400, { code: "missing_pos_serial" });
     }
 
-    // Campos obrigatórios no body
+    // Campos obrigatórios no body (valor_centavos ignorado — preço resolvido em condominio_precos)
     const identificador_local = String(bodyObj.identificador_local || "").trim();
     const condominio_id = String(bodyObj.condominio_id || "").trim();
-    const valor_centavos_raw = bodyObj.valor_centavos;
     const metodo_raw = String(bodyObj.metodo || "").trim().toUpperCase();
 
     if (!identificador_local) {
@@ -48,16 +47,8 @@ export async function POST(req: Request) {
     if (!condominio_id) {
       return jsonErrorCompat("condominio_id é obrigatório.", 400, { code: "missing_condominio_id" });
     }
-    if (!valor_centavos_raw || (typeof valor_centavos_raw !== "number" && typeof valor_centavos_raw !== "string")) {
-      return jsonErrorCompat("valor_centavos é obrigatório.", 400, { code: "missing_valor_centavos" });
-    }
     if (!metodo_raw || (metodo_raw !== "PIX" && metodo_raw !== "CARTAO")) {
       return jsonErrorCompat("metodo é obrigatório (PIX | CARTAO).", 400, { code: "missing_metodo" });
-    }
-
-    const valor_centavos = typeof valor_centavos_raw === "number" ? Math.trunc(valor_centavos_raw) : parseInt(String(valor_centavos_raw), 10);
-    if (!Number.isFinite(valor_centavos) || valor_centavos <= 0) {
-      return jsonErrorCompat("valor_centavos inválido.", 400, { code: "invalid_valor_centavos" });
     }
     const metodo = metodo_raw as "PIX" | "CARTAO";
 
@@ -168,6 +159,32 @@ export async function POST(req: Request) {
     if (!maquina.gateway_id) {
       return jsonErrorCompat("Máquina sem gateway_id vinculado.", 409, { code: "missing_gateway_id" });
     }
+
+    // Preço vigente: backend soberano — resolver em condominio_precos (canal POS)
+    const nowIso = new Date().toISOString();
+    const { data: precoRow, error: precoErr } = await supabase
+      .from("condominio_precos")
+      .select("valor_centavos")
+      .eq("condominio_maquina_id", maquina.id)
+      .eq("canal", "POS")
+      .lte("vigente_a_partir", nowIso)
+      .order("vigente_a_partir", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (precoErr) {
+      return jsonErrorCompat("Erro ao resolver preço.", 500, {
+        code: "db_error",
+        extra: { details: precoErr.message },
+      });
+    }
+    if (!precoRow) {
+      return jsonErrorCompat("Preço não configurado para esta máquina (canal POS).", 409, {
+        code: "price_not_configured",
+        extra: { condominio_maquina_id: maquina.id },
+      });
+    }
+    const valor_centavos = Number(precoRow.valor_centavos);
 
     // Parse quote se existir (mantém compatibilidade)
     const quote = bodyObj.quote && typeof bodyObj.quote === "object" ? (bodyObj.quote as Record<string, unknown>) : null;
