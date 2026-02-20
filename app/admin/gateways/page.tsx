@@ -5,12 +5,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 type Condominio = { id: string; nome: string };
 type Gateway = { id: string; serial: string; condominio_id: string; created_at?: string };
 
-function badgeClass(kind: "ok" | "muted") {
-  return kind === "ok"
-    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-    : "bg-zinc-100 text-zinc-700 border-zinc-200";
-}
-
 export default function AdminGatewaysPage() {
   const [condominios, setCondominios] = useState<Condominio[]>([]);
   const [items, setItems] = useState<Gateway[]>([]);
@@ -175,7 +169,6 @@ export default function AdminGatewaysPage() {
                   <tr>
                     <th className="text-left px-4 py-3 font-medium">Serial</th>
                     <th className="text-left px-4 py-3 font-medium">Loja</th>
-                    <th className="text-left px-4 py-3 font-medium">Status</th>
                     <th className="text-left px-4 py-3 font-medium">ID</th>
                   </tr>
                 </thead>
@@ -184,11 +177,6 @@ export default function AdminGatewaysPage() {
                     <tr key={g.id} className="hover:bg-zinc-50/60">
                       <td className="px-4 py-3 font-medium">{g.serial}</td>
                       <td className="px-4 py-3 text-zinc-700">{condNome(g.condominio_id)}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${badgeClass("ok")}`}>
-                          ativo
-                        </span>
-                      </td>
                       <td className="px-4 py-3 text-xs text-zinc-500">{g.id}</td>
                     </tr>
                   ))}

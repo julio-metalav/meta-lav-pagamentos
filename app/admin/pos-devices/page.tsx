@@ -5,12 +5,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 type Cond = { id: string; nome: string };
 type Pos = { id: string; serial: string; condominio_id: string };
 
-function badgeClass(kind: "ok" | "muted") {
-  return kind === "ok"
-    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-    : "bg-zinc-100 text-zinc-700 border-zinc-200";
-}
-
 export default function AdminPosDevicesPage() {
   const [conds, setConds] = useState<Cond[]>([]);
   const [items, setItems] = useState<Pos[]>([]);
@@ -171,7 +165,6 @@ export default function AdminPosDevicesPage() {
                   <tr>
                     <th className="text-left px-4 py-3 font-medium">Serial</th>
                     <th className="text-left px-4 py-3 font-medium">Loja</th>
-                    <th className="text-left px-4 py-3 font-medium">Status</th>
                     <th className="text-left px-4 py-3 font-medium">ID</th>
                   </tr>
                 </thead>
@@ -180,11 +173,6 @@ export default function AdminPosDevicesPage() {
                     <tr key={x.id} className="hover:bg-zinc-50/60">
                       <td className="px-4 py-3 font-medium">{x.serial}</td>
                       <td className="px-4 py-3 text-zinc-700">{condNome(x.condominio_id)}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${badgeClass("ok")}`}>
-                          ativo
-                        </span>
-                      </td>
                       <td className="px-4 py-3 text-xs text-zinc-500">{x.id}</td>
                     </tr>
                   ))}
