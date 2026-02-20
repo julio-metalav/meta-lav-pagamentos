@@ -103,7 +103,17 @@ jobs:
 
       - name: Build
         run: npm run build
+      # Prova qual código rodou: HEAD_SHA no log; pós-falha ver arquivo naquele SHA:
+      #   gh run view <RUN_ID> --json headSha -q .headSha
+      #   gh api "repos/OWNER/REPO/contents/scripts/e2e-full.mjs?ref=<SHA>" --jq .content | base64 -d
+      - name: E2E code ref (prova qual SHA rodou)
+        run: |
+          echo "HEAD_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          echo "E2E_SCRIPT_REF=$(git rev-parse HEAD):scripts/e2e-full.mjs"
+          grep -n "x-pos-serial" scripts/e2e-full.mjs || true
       - name: Run E2E FULL against Staging
         env:
           ENV: ci
-        run: node scripts/e2e-full.mjs
+        run: |
+          echo "Running E2E at HEAD_SHA=$HEAD_SHA"
+          node scripts/e2e-full.mjs
