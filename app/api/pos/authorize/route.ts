@@ -38,21 +38,18 @@ export async function POST(req: Request) {
 
     // Campos obrigatórios no body (valor_centavos ignorado — preço resolvido em condominio_precos)
     const identificador_local = String(bodyObj.identificador_local || "").trim();
-    const condominio_id = String(bodyObj.condominio_id || "").trim();
+    const body_condominio_id = String(bodyObj.condominio_id || "").trim();
     const metodo_raw = String(bodyObj.metodo || "").trim().toUpperCase();
 
     if (!identificador_local) {
       return jsonErrorCompat("identificador_local é obrigatório.", 400, { code: "missing_identificador_local" });
-    }
-    if (!condominio_id) {
-      return jsonErrorCompat("condominio_id é obrigatório.", 400, { code: "missing_condominio_id" });
     }
     if (!metodo_raw || (metodo_raw !== "PIX" && metodo_raw !== "CARTAO")) {
       return jsonErrorCompat("metodo é obrigatório (PIX | CARTAO).", 400, { code: "missing_metodo" });
     }
     const metodo = metodo_raw as "PIX" | "CARTAO";
 
-    // a) Buscar POS pelo x-pos-serial
+    // a) Buscar POS pelo x-pos-serial (fonte da verdade para condomínio)
     const { data: posDevice, error: posErr } = await supabase
       .from("pos_devices")
       .select("id, serial, condominio_id")
@@ -66,18 +63,25 @@ export async function POST(req: Request) {
       });
     }
 
-    // Se não existir → retornar 401
     if (!posDevice) {
       return jsonErrorCompat("POS não cadastrado (pos_devices).", 401, { code: "pos_not_found" });
     }
 
-    // b) Validar que pos.condominio_id === condominio_id
-    if (posDevice.condominio_id !== condominio_id) {
+    // condominio_id: body opcional; quando ausente, usa pos_devices.condominio_id (evita env CONDOMINIO_ID no CI)
+    const condominio_id = body_condominio_id || String(posDevice.condominio_id ?? "").trim() || "";
+    if (!condominio_id) {
+      return jsonErrorCompat(
+        "POS sem condomínio vinculado. Defina pos_devices.condominio_id no banco ou envie condominio_id no body.",
+        400,
+        { code: "pos_missing_condominio" }
+      );
+    }
+    if (body_condominio_id && posDevice.condominio_id !== body_condominio_id) {
       return jsonErrorCompat("POS não pertence a este condomínio.", 403, {
         code: "pos_condominio_mismatch",
         extra: {
           pos_condominio_id: posDevice.condominio_id,
-          requested_condominio_id: condominio_id,
+          requested_condominio_id: body_condominio_id,
         },
       });
     }
@@ -117,10 +121,10 @@ export async function POST(req: Request) {
       });
     }
 
-    // c) Buscar máquina com identificador_local, condominio_id, ativa = true
+    // c) Buscar máquina por condominio_id + identificador_local + ativa (select mínimo: só campos usados no fluxo)
     const { data: maquina, error: maqErr } = await supabase
       .from("condominio_maquinas")
-      .select("id, condominio_id, gateway_id, tipo, identificador_local, ativa, pos_device_id")
+      .select("id, condominio_id, gateway_id, ativa, pos_device_id")
       .eq("condominio_id", condominio_id)
       .eq("identificador_local", identificador_local)
       .eq("ativa", true)
@@ -139,6 +143,7 @@ export async function POST(req: Request) {
         extra: {
           condominio_id,
           identificador_local,
+          hint: "Verifique: pos_devices.condominio_id do POS deve ser o mesmo da máquina; identificador_local é case-sensitive.",
         },
       });
     }
