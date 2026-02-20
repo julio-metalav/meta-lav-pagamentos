@@ -32,6 +32,7 @@ const POS_SERIAL = process.env.POS_SERIAL || fixture.pos_serial || "POS-TESTE-00
 const IDENTIFICADOR_LOCAL = process.env.IDENTIFICADOR_LOCAL || fixture.identificador_local || "LAV-01";
 const VALOR_CENTAVOS = Number(process.env.VALOR_CENTAVOS || 1600);
 const METODO = process.env.METODO || "PIX"; // "PIX" | "CARTAO"
+const CONDOMINIO_ID = process.env.CONDOMINIO_ID || fixture.condominio_id || "";
 const CONDOMINIO_MAQUINAS_ID = process.env.CONDOMINIO_MAQUINAS_ID || fixture.condominio_maquinas_id || "";
 
 const GW_SERIAL = process.env.GW_SERIAL || process.env.GATEWAY_SERIAL || fixture.gw_serial || "GW-TESTE-001";
@@ -75,6 +76,12 @@ async function callJson(path, method = "GET", bodyObj = undefined, opts = {}) {
   const headers = { ...(opts.headers || {}) };
   if (STAGING_VERCEL_BYPASS_TOKEN) headers["x-vercel-protection-bypass"] = STAGING_VERCEL_BYPASS_TOKEN;
   if (bodyObj && !headers["content-type"]) headers["content-type"] = "application/json";
+  // Diagnóstico seguro: missing | empty | present (nunca loga o valor)
+  if (path.includes("authorize")) {
+    const val = headers["x-pos-serial"];
+    const state = val === undefined ? "missing" : (String(val).trim() === "" ? "empty" : "present");
+    console.warn("[authorize] x-pos-serial:", state);
+  }
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
@@ -218,13 +225,25 @@ async function callFinancial() {
     return callManualConfirmFlow();
   }
   if (!CONDOMINIO_MAQUINAS_ID) fail("Env CONDOMINIO_MAQUINAS_ID é obrigatório");
-  // 1) authorize
+  // Header obrigatório: ler em runtime (após loadEnv) e garantir string não vazia
+  const xPosSerialValue = String(process.env.POS_SERIAL ?? "").trim();
+  if (!xPosSerialValue) fail("POS_SERIAL vazio no E2E (defina no .env.ci.local ou secret)");
+  // Montar headers do authorize de forma explícita para evitar perda/sobrescrita
+  const authorizeHeaders = {
+    "content-type": "application/json",
+    "x-pos-serial": xPosSerialValue,
+  };
+  if (STAGING_VERCEL_BYPASS_TOKEN) authorizeHeaders["x-vercel-protection-bypass"] = STAGING_VERCEL_BYPASS_TOKEN;
+  // 1) authorize (backend deriva condominio_id do POS quando omitido; preço em condominio_precos)
   console.log("\n[authorize] calling /api/pos/authorize...");
-  const auth = await callJson("/api/pos/authorize", "POST", {
-    pos_serial: POS_SERIAL,
+  const authBody = {
+    pos_serial: xPosSerialValue,
     identificador_local: IDENTIFICADOR_LOCAL,
-    valor_centavos: VALOR_CENTAVOS,
     metodo: METODO,
+  };
+  if (CONDOMINIO_ID) authBody.condominio_id = CONDOMINIO_ID;
+  const auth = await callJson("/api/pos/authorize", "POST", authBody, {
+    headers: authorizeHeaders,
   });
   console.log("[authorize] status=", auth.status, auth.text);
   if (auth.status < 200 || auth.status >= 300 || !auth.json?.pagamento_id) fail("authorize falhou", auth.text);
@@ -266,7 +285,7 @@ async function callFinancial() {
 async function main() {
   console.log(`[env] BASE=${BASE}`);
   console.log(`[env] POS_SERIAL=${POS_SERIAL} IDENTIFICADOR_LOCAL=${IDENTIFICADOR_LOCAL} VALOR_CENTAVOS=${VALOR_CENTAVOS} METODO=${METODO}`);
-  console.log(`[env] CONDOMINIO_MAQUINAS_ID=${CONDOMINIO_MAQUINAS_ID}`);
+  console.log(`[env] CONDOMINIO_ID=${CONDOMINIO_ID || "(opcional, backend deriva do POS)"} CONDOMINIO_MAQUINAS_ID=${CONDOMINIO_MAQUINAS_ID}`);
   console.log(`[env] GW_SERIAL=${GW_SERIAL} GATEWAY_ID=${GW_ID}`);
   if (MANUAL_CONFIRM) console.log(`[mode] MANUAL_CONFIRM=1 (metodo=${MANUAL_METODO})`);
 
