@@ -98,6 +98,17 @@ jobs:
           require SUPABASE_URL
           require SUPABASE_SERVICE_ROLE_KEY
 
+      - name: Debug POS_SERIAL length (safe)
+        shell: bash
+        run: |
+          set -e
+          . ./.env.local || true
+          v="${POS_SERIAL:-}"
+          vt=$(printf "%s" "$v" | tr -d "\r\n" | sed -E "s/[[:space:]]+$//")
+          echo "POS_SERIAL_LEN=${#v}"
+          echo "POS_SERIAL_TRIM_LEN=${#vt}"
+          if [ -n "$vt" ]; then echo "POS_SERIAL_HAS_NONSPACE=yes"; else echo "POS_SERIAL_HAS_NONSPACE=no"; fi
+
       - name: Enum drift check (YAML <-> DB + Code <-> YAML)
         run: npm run enum:check
 
