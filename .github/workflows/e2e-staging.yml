@@ -100,17 +100,6 @@ jobs:
           require SUPABASE_SERVICE_ROLE_KEY
 
       - name: Debug POS_SERIAL length (safe)
-      - name: Debug IDENTIFICADOR_LOCAL length (safe)
-        shell: bash
-        run: |
-          set -e
-          . ./.env.local || true
-          v="${IDENTIFICADOR_LOCAL:-}"
-          vt=$(printf "%s" "$v" | tr -d "\r\n" | sed -E "s/[[:space:]]+$//")
-          echo "IDENTIFICADOR_LOCAL_LEN=${#v}"
-          echo "IDENTIFICADOR_LOCAL_TRIM_LEN=${#vt}"
-          if [ -n "$vt" ]; then echo "IDENTIFICADOR_LOCAL_HAS_NONSPACE=yes"; else echo "IDENTIFICADOR_LOCAL_HAS_NONSPACE=no"; fi
-
         shell: bash
         run: |
           set -e
