@@ -38,6 +38,7 @@ jobs:
           ENV=ci
           BASE_URL=${{ secrets.STAGING_BASE_URL }}
           CONDOMINIO_MAQUINAS_ID=${{ secrets.STAGING_CONDOMINIO_MAQUINAS_ID }}
+            CONDOMINIO_ID=${{ secrets.STAGING_CONDOMINIO_ID }}
           POS_SERIAL=${{ secrets.STAGING_POS_SERIAL }}
           IDENTIFICADOR_LOCAL=${{ secrets.STAGING_IDENTIFICADOR_LOCAL }}
           GW_SERIAL=${{ secrets.STAGING_GW_SERIAL }}
