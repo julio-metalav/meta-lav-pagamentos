@@ -26,9 +26,9 @@ jobs:
       - name: Registry check (canonical tables)
         run: npm run registry:check
 
-      - name: Write .env.local for CI
+      - name: Write .env.ci.local for CI
         run: |
-          cat > .env.local << 'EOF'
+          cat > .env.ci.local << 'EOF'
           # CI generated
           ENV=ci
           BASE_URL=${{ secrets.STAGING_BASE_URL }}
@@ -51,7 +51,7 @@ jobs:
           set -e
           ci="${{ secrets.STAGING_CI_BASE_URL }}"
           if [ -n "$ci" ]; then
-            sed -i -E "s|^BASE_URL=.*|BASE_URL=$ci|g" .env.local
+            sed -i -E "s|^BASE_URL=.*|BASE_URL=$ci|g" .env.ci.local
             echo "Using CI BASE_URL"
           else
             echo "Using default STAGING_BASE_URL"
@@ -61,19 +61,19 @@ jobs:
         shell: bash
         run: |
           set -e
-          base=$(grep -E '^BASE_URL=' .env.local | head -n1 | cut -d= -f2-)
+          base=$(grep -E '^BASE_URL=' .env.ci.local | head -n1 | cut -d= -f2-)
           host=$(echo "$base" | sed -E 's#^https?://##' | cut -d/ -f1)
           echo "BASE_URL_HOST=$host"
 
-      - name: Verify .env.local
+      - name: Verify .env.ci.local
         run: |
-          test -f .env.local || (echo "missing .env.local" && exit 1)
-          echo ".env.local present" && wc -c .env.local
+          test -f .env.ci.local || (echo "missing .env.ci.local" && exit 1)
+          echo ".env.ci.local present" && wc -c .env.ci.local
 
       - name: Pre-validate required env
         run: |
           set -e
-          . ./.env.local || true
+          . ./.env.ci.local || true
           require() { v="$1"; eval "val=\${$v:-}"; if [ -z "$val" ]; then echo "MISSING: $v"; exit 1; else echo "OK: $v"; fi; }
           require ENV
           require BASE_URL
