@@ -23,8 +23,8 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Registry check (canonical tables)
+        run: npm run registry:check
 
       - name: Write .env.local for CI
         run: |
@@ -78,6 +78,14 @@ jobs:
           require CONDOMINIO_MAQUINAS_ID
           require GW_SERIAL
           require GATEWAY_ID
+          require SUPABASE_URL
+          require SUPABASE_SERVICE_ROLE_KEY
+
+      - name: Enum drift check (YAML ↔ DB + Code ↔ YAML)
+        run: npm run enum:check
+
+      - name: Build
+        run: npm run build
 
       - name: Run E2E FULL against Staging
         run: node scripts/e2e-full.mjs
