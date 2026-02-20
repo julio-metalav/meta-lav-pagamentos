@@ -129,7 +129,7 @@ export async function POST(req: Request) {
     // c) Buscar máquina com identificador_local, condominio_id, ativa = true
     const { data: maquina, error: maqErr } = await supabase
       .from("condominio_maquinas")
-      .select("id, condominio_id, gateway_id, tipo, identificador_local, ativa, pos_device_id")
+      .select("id, condominio_id, gateway_id, ativa, pos_device_id")
       .eq("condominio_id", condominio_id)
       .eq("identificador_local", identificador_local)
       .eq("ativa", true)
