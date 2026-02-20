@@ -2,8 +2,9 @@ name: E2E Staging V2 (Finance + IoT HMAC)
 
 on:
   push:
-    branches:
-      - test/e2e-full-runner
+  branches:
+    - test/e2e-full-runner
+    - feat/pricing-soberano
   workflow_dispatch:
 
 jobs:
