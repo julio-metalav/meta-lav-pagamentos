@@ -98,7 +98,7 @@ jobs:
           require SUPABASE_URL
           require SUPABASE_SERVICE_ROLE_KEY
 
-      - name: Enum drift check (YAML ↔ DB + Code ↔ YAML)
+      - name: Enum drift check (YAML <-> DB + Code <-> YAML)
         run: npm run enum:check
 
       - name: Build
