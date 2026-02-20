@@ -36,32 +36,20 @@ export async function POST(req: Request) {
       return jsonErrorCompat("x-pos-serial é obrigatório.", 400, { code: "missing_pos_serial" });
     }
 
-    // Campos obrigatórios no body
+    // Campos obrigatórios no body (valor_centavos ignorado — preço resolvido em condominio_precos)
     const identificador_local = String(bodyObj.identificador_local || "").trim();
-    const condominio_id = String(bodyObj.condominio_id || "").trim();
-    const valor_centavos_raw = bodyObj.valor_centavos;
+    const body_condominio_id = String(bodyObj.condominio_id || "").trim();
     const metodo_raw = String(bodyObj.metodo || "").trim().toUpperCase();
 
     if (!identificador_local) {
       return jsonErrorCompat("identificador_local é obrigatório.", 400, { code: "missing_identificador_local" });
     }
-    if (!condominio_id) {
-      return jsonErrorCompat("condominio_id é obrigatório.", 400, { code: "missing_condominio_id" });
-    }
-    if (!valor_centavos_raw || (typeof valor_centavos_raw !== "number" && typeof valor_centavos_raw !== "string")) {
-      return jsonErrorCompat("valor_centavos é obrigatório.", 400, { code: "missing_valor_centavos" });
-    }
     if (!metodo_raw || (metodo_raw !== "PIX" && metodo_raw !== "CARTAO")) {
       return jsonErrorCompat("metodo é obrigatório (PIX | CARTAO).", 400, { code: "missing_metodo" });
     }
-
-    const valor_centavos = typeof valor_centavos_raw === "number" ? Math.trunc(valor_centavos_raw) : parseInt(String(valor_centavos_raw), 10);
-    if (!Number.isFinite(valor_centavos) || valor_centavos <= 0) {
-      return jsonErrorCompat("valor_centavos inválido.", 400, { code: "invalid_valor_centavos" });
-    }
     const metodo = metodo_raw as "PIX" | "CARTAO";
 
-    // a) Buscar POS pelo x-pos-serial
+    // a) Buscar POS pelo x-pos-serial (fonte da verdade para condomínio)
     const { data: posDevice, error: posErr } = await supabase
       .from("pos_devices")
       .select("id, serial, condominio_id")
@@ -75,18 +63,25 @@ export async function POST(req: Request) {
       });
     }
 
-    // Se não existir → retornar 401
     if (!posDevice) {
       return jsonErrorCompat("POS não cadastrado (pos_devices).", 401, { code: "pos_not_found" });
     }
 
-    // b) Validar que pos.condominio_id === condominio_id
-    if (posDevice.condominio_id !== condominio_id) {
+    // condominio_id: body opcional; quando ausente, usa pos_devices.condominio_id (evita env CONDOMINIO_ID no CI)
+    const condominio_id = body_condominio_id || String(posDevice.condominio_id ?? "").trim() || "";
+    if (!condominio_id) {
+      return jsonErrorCompat(
+        "POS sem condomínio vinculado. Defina pos_devices.condominio_id no banco ou envie condominio_id no body.",
+        400,
+        { code: "pos_missing_condominio" }
+      );
+    }
+    if (body_condominio_id && posDevice.condominio_id !== body_condominio_id) {
       return jsonErrorCompat("POS não pertence a este condomínio.", 403, {
         code: "pos_condominio_mismatch",
         extra: {
           pos_condominio_id: posDevice.condominio_id,
-          requested_condominio_id: condominio_id,
+          requested_condominio_id: body_condominio_id,
         },
       });
     }
@@ -126,10 +121,10 @@ export async function POST(req: Request) {
       });
     }
 
-    // c) Buscar máquina com identificador_local, condominio_id, ativa = true
+    // c) Buscar máquina por condominio_id + identificador_local + ativa (select mínimo: só campos usados no fluxo)
     const { data: maquina, error: maqErr } = await supabase
       .from("condominio_maquinas")
-      .select("id, condominio_id, gateway_id, tipo, identificador_local, ativa, pos_device_id")
+      .select("id, condominio_id, gateway_id, ativa, pos_device_id")
       .eq("condominio_id", condominio_id)
       .eq("identificador_local", identificador_local)
       .eq("ativa", true)
@@ -148,6 +143,7 @@ export async function POST(req: Request) {
         extra: {
           condominio_id,
           identificador_local,
+          hint: "Verifique: pos_devices.condominio_id do POS deve ser o mesmo da máquina; identificador_local é case-sensitive.",
         },
       });
     }
@@ -168,6 +164,32 @@ export async function POST(req: Request) {
     if (!maquina.gateway_id) {
       return jsonErrorCompat("Máquina sem gateway_id vinculado.", 409, { code: "missing_gateway_id" });
     }
+
+    // Preço vigente: backend soberano — resolver em condominio_precos (canal POS)
+    const nowIso = new Date().toISOString();
+    const { data: precoRow, error: precoErr } = await supabase
+      .from("condominio_precos")
+      .select("valor_centavos")
+      .eq("condominio_maquina_id", maquina.id)
+      .eq("canal", "POS")
+      .lte("vigente_a_partir", nowIso)
+      .order("vigente_a_partir", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (precoErr) {
+      return jsonErrorCompat("Erro ao resolver preço.", 500, {
+        code: "db_error",
+        extra: { details: precoErr.message },
+      });
+    }
+    if (!precoRow) {
+      return jsonErrorCompat("Preço não configurado para esta máquina (canal POS).", 409, {
+        code: "price_not_configured",
+        extra: { condominio_maquina_id: maquina.id },
+      });
+    }
+    const valor_centavos = Number(precoRow.valor_centavos);
 
     // Parse quote se existir (mantém compatibilidade)
     const quote = bodyObj.quote && typeof bodyObj.quote === "object" ? (bodyObj.quote as Record<string, unknown>) : null;

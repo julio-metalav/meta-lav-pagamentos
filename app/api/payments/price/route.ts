@@ -7,6 +7,84 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { parsePriceInput } from "@/lib/payments/contracts";
 
+/** GET: preço oficial vigente para POS (condominio_precos, canal POS). Query: condominio_id, identificador_local */
+export async function GET(req: Request) {
+  try {
+    const u = new URL(req.url);
+    const condominio_id = String(u.searchParams.get("condominio_id") ?? "").trim();
+    const identificador_local = String(u.searchParams.get("identificador_local") ?? "").trim();
+
+    if (!condominio_id) {
+      return jsonErrorCompat("condominio_id é obrigatório.", 400, { code: "missing_condominio_id" });
+    }
+    if (!identificador_local) {
+      return jsonErrorCompat("identificador_local é obrigatório.", 400, { code: "missing_identificador_local" });
+    }
+
+    const sb = supabaseAdmin() as any;
+
+    const { data: maquina, error: maqErr } = await sb
+      .from("condominio_maquinas")
+      .select("id, condominio_id, identificador_local")
+      .eq("condominio_id", condominio_id)
+      .eq("identificador_local", identificador_local)
+      .eq("ativa", true)
+      .maybeSingle();
+
+    if (maqErr) {
+      return jsonErrorCompat("Erro ao buscar máquina.", 500, {
+        code: "db_error",
+        extra: { details: maqErr.message },
+      });
+    }
+    if (!maquina) {
+      return jsonErrorCompat("Máquina não encontrada ou inativa.", 404, {
+        code: "machine_not_found",
+        extra: { condominio_id, identificador_local },
+      });
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data: precoRow, error: precoErr } = await sb
+      .from("condominio_precos")
+      .select("valor_centavos, vigente_a_partir")
+      .eq("condominio_maquina_id", maquina.id)
+      .eq("canal", "POS")
+      .lte("vigente_a_partir", nowIso)
+      .order("vigente_a_partir", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (precoErr) {
+      return jsonErrorCompat("Erro ao resolver preço.", 500, {
+        code: "db_error",
+        extra: { details: precoErr.message },
+      });
+    }
+    if (!precoRow) {
+      return jsonErrorCompat("Preço não configurado para esta máquina (canal POS).", 409, {
+        code: "price_not_configured",
+        extra: { condominio_maquina_id: maquina.id },
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      condominio_id: maquina.condominio_id,
+      identificador_local: maquina.identificador_local,
+      condominio_maquina_id: maquina.id,
+      valor_centavos: Number(precoRow.valor_centavos),
+      vigente_a_partir: precoRow.vigente_a_partir ?? null,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return jsonErrorCompat("Erro inesperado ao consultar preço.", 500, {
+      code: "internal_error",
+      extra: { details: msg },
+    });
+  }
+}
+
 function pickAmountCents(row: Record<string, any>): number | null {
   const centsCandidates = ["valor_centavos", "preco_centavos", "amount_centavos"];
   for (const k of centsCandidates) {
