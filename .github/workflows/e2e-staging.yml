@@ -29,7 +29,8 @@ jobs:
       - name: Write .env.local for CI
         run: |
           cat > .env.local << 'EOF'
-          # CI generated
+          # CI generated (e2e-full.mjs usa loadEnv(); ENV=ci faz carregar este arquivo via dotenv em _env.mjs)
+          ENV=ci
           BASE_URL=${{ secrets.STAGING_BASE_URL }}
           CONDOMINIO_MAQUINAS_ID=${{ secrets.STAGING_CONDOMINIO_MAQUINAS_ID }}
           POS_SERIAL=${{ secrets.STAGING_POS_SERIAL }}
@@ -75,6 +76,8 @@ jobs:
           . ./.env.local || true
           require() { v="$1"; eval "val=\${$v:-}"; if [ -z "$val" ]; then echo "MISSING: $v"; exit 1; else echo "OK: $v"; fi; }
           require BASE_URL
+          require POS_SERIAL
+          require IDENTIFICADOR_LOCAL
           require CONDOMINIO_MAQUINAS_ID
           require GW_SERIAL
           require GATEWAY_ID
@@ -88,4 +91,24 @@ jobs:
         run: npm run build
 
       - name: Run E2E FULL against Staging
-        run: node scripts/e2e-full.mjs
+        shell: bash
+        env:
+          ENV: ci
+          BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+          POS_SERIAL: ${{ secrets.STAGING_POS_SERIAL }}
+          IDENTIFICADOR_LOCAL: ${{ secrets.STAGING_IDENTIFICADOR_LOCAL }}
+          CONDOMINIO_MAQUINAS_ID: ${{ secrets.STAGING_CONDOMINIO_MAQUINAS_ID }}
+          GW_SERIAL: ${{ secrets.STAGING_GW_SERIAL }}
+          GATEWAY_ID: ${{ secrets.STAGING_GATEWAY_ID }}
+          SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          IOT_HMAC_SECRET: ${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
+          IOT_HMAC_SECRET__GW_TESTE_001: ${{ secrets.STAGING_IOT_HMAC_SECRET__GW_TESTE_001 }}
+          INTERNAL_MANUAL_TOKEN: ${{ secrets.INTERNAL_MANUAL_TOKEN }}
+        run: |
+          set -e
+          set -a
+          source .env.local
+          set +a
+          node scripts/e2e-full.mjs

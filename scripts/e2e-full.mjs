@@ -218,18 +218,20 @@ async function callFinancial() {
     return callManualConfirmFlow();
   }
   if (!CONDOMINIO_MAQUINAS_ID) fail("Env CONDOMINIO_MAQUINAS_ID é obrigatório");
+  if (!POS_SERIAL || String(POS_SERIAL).trim() === "") {
+    fail("POS_SERIAL vazio ou ausente (obrigatório para x-pos-serial no authorize). Defina STAGING_POS_SERIAL no GitHub Actions.");
+  }
   // 1) authorize (x-pos-serial é header obrigatório)
-  console.log("\n[authorize] calling /api/pos/authorize...");
-  const auth = await callJson(
-    "/api/pos/authorize",
-    "POST",
-    {
-      identificador_local: IDENTIFICADOR_LOCAL,
-      valor_centavos: VALOR_CENTAVOS,
-      metodo: METODO,
-    },
-    { headers: { "x-pos-serial": POS_SERIAL } }
-  );
+  const posSerialValue = String(POS_SERIAL).trim();
+  console.log("\n[authorize] calling /api/pos/authorize...", "x-pos-serial length=" + posSerialValue.length);
+  const authHeaders = { "x-pos-serial": posSerialValue };
+  const authBody = {
+    identificador_local: IDENTIFICADOR_LOCAL,
+    valor_centavos: VALOR_CENTAVOS,
+    metodo: METODO,
+    pos_serial: posSerialValue,
+  };
+  const auth = await callJson("/api/pos/authorize", "POST", authBody, { headers: authHeaders });
   console.log("[authorize] status=", auth.status, auth.text);
   if (auth.status < 200 || auth.status >= 300 || !auth.json?.pagamento_id) fail("authorize falhou", auth.text);
   const pagamento_id = String(auth.json.pagamento_id);

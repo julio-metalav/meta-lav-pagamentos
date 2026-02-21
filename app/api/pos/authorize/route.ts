@@ -37,8 +37,11 @@ export async function POST(req: Request) {
       req.headers.get("x-correlation-id") || bodyObj.correlation_id || bodyObj.request_id || crypto.randomUUID()
     ).trim();
 
-    // Header obrigatório: x-pos-serial
-    const headerPosSerial = String(req.headers.get("x-pos-serial") || "").trim();
+    // x-pos-serial: header obrigatório; fallback no body para compat (CI/proxy pode dropar header)
+    const headerPosSerial = String(
+      req.headers.get("x-pos-serial") || req.headers.get("X-Pos-Serial")
+      || bodyObj.x_pos_serial || bodyObj.pos_serial || ""
+    ).trim();
     if (!headerPosSerial) {
       return withCommitHeader(jsonErrorCompat("x-pos-serial é obrigatório.", 400, { code: "missing_pos_serial" }));
     }
