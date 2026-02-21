@@ -40,7 +40,6 @@ jobs:
           SUPABASE_URL=${{ secrets.STAGING_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_URL=${{ secrets.STAGING_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY=${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-          IOT_HMAC_SECRET=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_LAB_01 }}
           IOT_HMAC_SECRET__GW_LAB_01=${{ secrets.STAGING_IOT_HMAC_SECRET__GW_LAB_01 }}
           INTERNAL_MANUAL_TOKEN=${{ secrets.INTERNAL_MANUAL_TOKEN }}
           EOF
@@ -81,6 +80,7 @@ jobs:
           require CONDOMINIO_MAQUINAS_ID
           require GW_SERIAL
           require GATEWAY_ID
+          require IOT_HMAC_SECRET__GW_LAB_01
           require SUPABASE_URL
           require SUPABASE_SERVICE_ROLE_KEY
 
@@ -103,7 +103,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-          IOT_HMAC_SECRET: ${{ secrets.STAGING_IOT_HMAC_SECRET__GW_LAB_01 }}
           IOT_HMAC_SECRET__GW_LAB_01: ${{ secrets.STAGING_IOT_HMAC_SECRET__GW_LAB_01 }}
           INTERNAL_MANUAL_TOKEN: ${{ secrets.INTERNAL_MANUAL_TOKEN }}
         run: |

@@ -150,6 +150,31 @@ curl -sS -X POST $BASE_URL/api/iot/evento \
   - GitHub Actions verdes: runs `22023640931` e `22023652108` do workflow `E2E Staging V2 (Finance + IoT HMAC)` na branch `test/e2e-full-runner`.
 - **Para não repetir:** sempre validar se o domínio aponta para o deployment Production correto antes de rodar o E2E e garantir que cada gateway usado pelo CI tenha sua `IOT_HMAC_SECRET__<SERIAL>` definida nas envs de runtime.
 
+## ITEM 2 — E2E Staging: `machine_not_found` em `/api/pos/authorize`
+- **Sintoma:** Workflow E2E falha em "Run E2E FULL against Staging" com resposta 404 e `{"ok":false,"error":"Máquina não encontrada ou inativa.","error_v1":[{"code":"machine_not_found",...}]}`.
+- **Causa:** O `/api/pos/authorize` encontra o POS em `pos_devices` (por `x-pos-serial`), mas não encontra em `condominio_maquinas` uma máquina **ativa** com o mesmo `condominio_id` e o `identificador_local` usados no CI (secrets `STAGING_POS_SERIAL`, `STAGING_IDENTIFICADOR_LOCAL`).
+- **Checklist no banco de Staging (Supabase):**
+  1. **pos_devices:** existe uma linha com `serial = STAGING_POS_SERIAL` e `condominio_id` preenchido.
+  2. **condominio_maquinas:** existe uma linha com:
+     - `condominio_id` = mesmo do POS acima,
+     - `identificador_local` = `STAGING_IDENTIFICADOR_LOCAL`,
+     - `ativa = true`,
+     - `pos_device_id` = id do POS (da linha em pos_devices),
+     - `gateway_id` preenchido (gateway válido em `gateways`).
+  3. **GitHub Secrets:** `STAGING_POS_SERIAL`, `STAGING_IDENTIFICADOR_LOCAL` e `STAGING_CONDOMINIO_MAQUINAS_ID` batem com os dados acima (CONDOMINIO_MAQUINAS_ID = id da linha em condominio_maquinas).
+- **Para não repetir:** ao alterar dados de staging (condomínio, máquinas, POS) ou rotacionar secrets, conferir que a trinca POS → condomínio → máquina (ativa, vinculada ao POS e com gateway) permanece consistente.
+- **SQL de diagnóstico e correção:** use o arquivo `docs/runbook/staging-e2e-machine-check.sql` no Supabase (Staging): substitua os placeholders pelos valores dos secrets, rode a Parte 1 (diagnóstico), depois 2a (reativar), 2b (criar máquina) ou 2c (vincular ao POS) conforme o resultado.
+
+## ITEM 3 — E2E Staging: `invalid_hmac` em `/api/iot/poll`
+- **Sintoma:** authorize/confirm/execute-cycle retornam 200, mas o passo **poll** falha com 401 `{"ok":false,"error":"invalid_hmac"}`.
+- **Causa:** O poll (e depois ack/evento) usa autenticação HMAC. O servidor (Vercel) calcula a assinatura esperada com o serial do header `x-gw-serial` e o secret de env `IOT_HMAC_SECRET__<SERIAL_NORMALIZADO>` (sem fallback). Se o valor do secret no **runtime da Vercel** for diferente do valor usado no **CI (GitHub Actions)** para assinar, o servidor devolve `invalid_hmac`.
+- **Checklist:**
+  1. **Serial no CI:** o workflow usa `STAGING_GW_SERIAL` (ex.: `GW-LAB-01`). O nome da env no servidor é o serial em maiúsculas com não-alfanuméricos trocados por `_` (ex.: `GW-LAB-01` → `GW_LAB_01`).
+  2. **Vercel:** no projeto que atende o domínio do E2E (ex.: `ci.metalav.com.br`), defina **exatamente** o mesmo valor usado no GitHub:
+     - `IOT_HMAC_SECRET__GW_LAB_01` = valor do secret `STAGING_IOT_HMAC_SECRET__GW_LAB_01`  
+     (ou, se o serial for outro, `IOT_HMAC_SECRET__<NORMALIZADO>` = valor do secret correspondente).
+  3. Redeploy após alterar env.
+- **Guia completo:** ver `docs/runbook/HMAC_STAGING_DEFINITIVO.md` (ou use “Redeploy” na Vercel para garantir que o runtime pegou a nova variável).
 ## Piloto Stone Offline — /api/manual/confirm
 - **Objetivo:** permitir confirmação manual de pagamentos realizados em POS Stone/Pix offline e disparar o fluxo `execute-cycle` padrão sem alterar o core.
 - **Endpoint:** `POST /api/manual/confirm` (App Router). Requer header `x-internal-token` igual ao env `INTERNAL_MANUAL_TOKEN`. Se o token não existir no runtime, o endpoint responde 501 para evitar exposição.
