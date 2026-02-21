@@ -141,17 +141,32 @@ async function waitForCondition(label, fn, opts = {}) {
 }
 
 async function expectIotCommandStatus(cmdId, expectedStatuses, opts = {}) {
-  const allow = (Array.isArray(expectedStatuses) ? expectedStatuses : [expectedStatuses]).map((s) => String(s).toUpperCase());
+  const allow = (Array.isArray(expectedStatuses) ? expectedStatuses : [expectedStatuses])
+    .map((s) => String(s).toUpperCase());
+
   await waitForCondition(`iot_commands:${cmdId}:${allow.join("|")}`, async () => {
-    const row = await supabaseSelect(
+    // 1) Tenta buscar por id (iot_commands.id)
+    let row = await supabaseSelect(
       "iot_commands",
-      { select: "cmd_id,status,ack_at", cmd_id: `eq.${cmdId}` },
+      { select: "id,cmd_id,status,ack_at", id: `eq.${cmdId}` },
       { single: true }
     );
+
+    // 2) Se não encontrar, tenta por cmd_id
+    if (!row) {
+      row = await supabaseSelect(
+        "iot_commands",
+        { select: "id,cmd_id,status,ack_at", cmd_id: `eq.${cmdId}` },
+        { single: true }
+      );
+    }
+
     if (!row) return false;
+
     const current = String(row.status || "").toUpperCase();
     if (!allow.includes(current)) return false;
     if (opts.requireAckAt && !row.ack_at) return false;
+
     return true;
   }, opts);
 }
