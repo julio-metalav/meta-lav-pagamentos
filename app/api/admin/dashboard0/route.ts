@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HOURS_MIN = 1;
@@ -45,6 +46,7 @@ type FallbackRowEvento = { created_at: string | null };
 
 async function runFallback(
   sb: ReturnType<typeof supabaseAdmin>,
+  tenantId: string,
   start: Date,
   end: Date,
   hours: number,
@@ -63,6 +65,7 @@ async function runFallback(
     const { data: rows } = await sb
       .from("condominio_maquinas")
       .select("id")
+      .eq("tenant_id", tenantId)
       .eq("condominio_id", condominioId)
       .limit(MAX_MAQUINA_IDS + 1);
     maquinaIds = (rows ?? []).map((r: { id: string }) => r.id);
@@ -79,6 +82,7 @@ async function runFallback(
     let qIc = sb
       .from("iot_commands")
       .select("id,status,created_at,ack_at,gateway_id,condominio_maquinas_id")
+      .eq("tenant_id", tenantId)
       .gte("created_at", startISO)
       .lte("created_at", endISO)
       .order("created_at", { ascending: false })
@@ -107,6 +111,7 @@ async function runFallback(
   const { data: cicloRows, error: cicloErr } = await sb
     .from("ciclos")
     .select("id,status,created_at")
+    .eq("tenant_id", tenantId)
     .gte("created_at", startISO)
     .lte("created_at", endISO)
     .order("created_at", { ascending: false })
@@ -130,6 +135,7 @@ async function runFallback(
     let qEv = sb
       .from("eventos_iot")
       .select("created_at")
+      .eq("tenant_id", tenantId)
       .gte("created_at", startISO)
       .lte("created_at", endISO)
       .order("created_at", { ascending: false })
@@ -171,6 +177,7 @@ async function runFallback(
 
 export async function GET(req: Request) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const url = new URL(req.url);
     const hours = parseHours(url.searchParams.get("hours"));
     const condominioId = parseUuid(url.searchParams.get("condominio_id"));
@@ -190,7 +197,7 @@ export async function GET(req: Request) {
     if (error) {
       if (isRpcUnavailable(error)) {
         try {
-          const fallback = await runFallback(sb, start, end, hours, condominioId, gatewayId);
+          const fallback = await runFallback(sb, tenantId, start, end, hours, condominioId, gatewayId);
           return NextResponse.json(fallback);
         } catch (fallbackErr) {
           const msg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
@@ -208,7 +215,7 @@ export async function GET(req: Request) {
 
     if (!data || typeof data !== "object") {
       try {
-        const fallback = await runFallback(sb, start, end, hours, condominioId, gatewayId);
+        const fallback = await runFallback(sb, tenantId, start, end, hours, condominioId, gatewayId);
         return NextResponse.json(fallback);
       } catch (fallbackErr) {
         const msg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);

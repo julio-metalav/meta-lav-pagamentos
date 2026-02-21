@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 function parsePagination(url: string) {
   const u = new URL(url);
@@ -15,13 +16,14 @@ function parsePagination(url: string) {
 
 export async function GET(req: Request) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const { search, page, limit } = parsePagination(req.url);
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
     const sb = supabaseAdmin() as any;
 
-    let q = sb.from("condominios").select("id,nome", { count: "exact" }).order("nome", { ascending: true }).range(from, to);
+    let q = sb.from("condominios").select("id,nome", { count: "exact" }).eq("tenant_id", tenantId).order("nome", { ascending: true }).range(from, to);
 
     if (search) {
       q = q.ilike("nome", `%${search}%`);
@@ -48,6 +50,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const body = await req.json().catch(() => ({}));
     const nome = String(body?.nome || "").trim();
 
@@ -58,6 +61,7 @@ export async function POST(req: Request) {
     const { data: dup, error: dupErr } = await sb
       .from("condominios")
       .select("id,nome")
+      .eq("tenant_id", tenantId)
       .ilike("nome", nome)
       .limit(1)
       .maybeSingle();
@@ -67,7 +71,7 @@ export async function POST(req: Request) {
 
     const { data, error } = await sb
       .from("condominios")
-      .insert({ nome })
+      .insert({ tenant_id: tenantId, nome })
       .select("id,nome")
       .single();
 

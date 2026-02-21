@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
  type PaymentRow = {
   id: string;
@@ -58,11 +59,13 @@ export async function GET(req: Request) {
     const pagamentoId = String(url.searchParams.get("pagamento_id") || "").trim();
     if (!pagamentoId) return jsonErrorCompat("pagamento_id é obrigatório.", 400, { code: "missing_pagamento_id" });
 
+    const tenantId = getTenantIdFromRequest(req);
     const sb = supabaseAdmin() as any;
 
     const { data: payment, error: payErr } = await sb
       .from("pagamentos")
       .select("id,status,valor_centavos,metodo,created_at")
+      .eq("tenant_id", tenantId)
       .eq("id", pagamentoId)
       .maybeSingle();
 
@@ -72,6 +75,7 @@ export async function GET(req: Request) {
     const { data: cycle, error: cycleErr } = await sb
       .from("ciclos")
       .select("id,status,maquina_id,condominio_id,created_at")
+      .eq("tenant_id", tenantId)
       .eq("pagamento_id", pagamentoId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -86,6 +90,7 @@ export async function GET(req: Request) {
       const commandQuery = sb
         .from("iot_commands")
         .select("id,cmd_id,status,created_at,payload")
+        .eq("tenant_id", tenantId)
         .order("created_at", { ascending: false })
         .limit(1);
 

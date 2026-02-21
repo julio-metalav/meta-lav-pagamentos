@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { parseConfirmInput } from "@/lib/payments/contracts";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 function providerToGateway(provider: "stone" | "asaas"): "STONE" | "ASAAS" {
   return provider === "stone" ? "STONE" : "ASAAS";
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
     if (!parsed.ok) return jsonErrorCompat(parsed.message, 400, { code: parsed.code });
 
     const input = parsed.data;
+    const tenantId = getTenantIdFromRequest(req);
     const sb = supabaseAdmin() as any;
 
     const gateway = providerToGateway(input.provider);
@@ -32,6 +34,7 @@ export async function POST(req: Request) {
     const { data: replayByRef, error: refErr } = await sb
       .from("pagamentos")
       .select("id,status,external_id,gateway_pagamento,paid_at")
+      .eq("tenant_id", tenantId)
       .eq("gateway_pagamento", gateway)
       .eq("external_id", input.provider_ref)
       .maybeSingle();
@@ -51,6 +54,7 @@ export async function POST(req: Request) {
     const { data: pay, error: payErr } = await sb
       .from("pagamentos")
       .select("id,status,gateway_pagamento,external_id,paid_at")
+      .eq("tenant_id", tenantId)
       .eq("id", input.payment_id)
       .maybeSingle();
 
@@ -90,6 +94,7 @@ export async function POST(req: Request) {
     const { data: updated, error: upErr } = await sb
       .from("pagamentos")
       .update(patch)
+      .eq("tenant_id", tenantId)
       .eq("id", input.payment_id)
       .select("id,status")
       .maybeSingle();

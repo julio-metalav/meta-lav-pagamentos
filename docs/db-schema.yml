@@ -6,7 +6,9 @@ meta:
   project: "meta-lav-pagamentos"
   timezone: "UTC"
   source_of_truth: "pt-br"
-  last_updated: "2026-02-19"
+  last_updated: "2026-02-21"
+  multi_tenant: true
+  note: "Tabelas runtime com tenant_id NOT NULL (FK public.tenants). Runtime usa lib/tenant (DEFAULT_TENANT_ID)."
 
 conventions:
   canonical_schema: "public"
@@ -41,6 +43,7 @@ tables:
           - "ABORTADO"
     columns:
       id: { type: "uuid", required: true }
+      tenant_id: { type: "uuid", required: true }
       pagamento_id: { type: "uuid", required: true }
       condominio_id: { type: "uuid", required: true }
       maquina_id: { type: "uuid", required: true }
@@ -69,6 +72,7 @@ tables:
           - "ERRO"
     columns:
       id: { type: "uuid", required: true }
+      tenant_id: { type: "uuid", required: true }
       gateway_id: { type: "uuid", required: true }
       maquina_id: { type: "uuid", required: false }
       tipo: { type: "iot_evento_tipo", required: true }
@@ -82,6 +86,7 @@ tables:
     primary_key: ["id"]
     columns:
       id: { type: "uuid", required: true }
+      tenant_id: { type: "uuid", required: true }
       gateway_id: { type: "uuid", required: true }
       cmd_id: { type: "uuid", required: true }
       pagamento_id: { type: "uuid", required: false }
@@ -105,6 +110,7 @@ tables:
           - "secadora"
     columns:
       id: { type: "uuid", required: true }
+      tenant_id: { type: "uuid", required: true }
       condominio_id: { type: "uuid", required: true }
       gateway_id: { type: "uuid", required: true }
       kit_id: { type: "uuid", required: false }
@@ -123,6 +129,7 @@ tables:
     table: "gateways"
     columns:
       id: { type: "uuid", required: true }
+      tenant_id: { type: "uuid", required: true }
       serial: { type: "text", required: true }
       condominio_id: { type: "uuid", required: true }
       last_seen_at: { type: "timestamptz", required: false }
@@ -143,6 +150,7 @@ tables:
     table: "pos_devices"
     columns:
       id: { type: "uuid", required: true }
+      tenant_id: { type: "uuid", required: true }
       serial: { type: "text", required: true }
       condominio_id: { type: "uuid", required: true }
       stone_merchant_id: { type: "text", required: false }
@@ -187,6 +195,7 @@ tables:
 
     columns:
       id: { type: "uuid", required: true }
+      tenant_id: { type: "uuid", required: true }
       condominio_id: { type: "uuid", required: true }
       maquina_id: { type: "uuid", required: false }
 
@@ -226,6 +235,7 @@ tables:
     primary_key: ["id"]
     columns:
       id: { type: "uuid", required: true }
+      tenant_id: { type: "uuid", required: true }
       nome: { type: "text", required: true }
       cidade: { type: "text", required: true }
       uf: { type: "text", required: true }

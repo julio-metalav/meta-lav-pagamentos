@@ -1,5 +1,6 @@
 import { authenticateGateway } from "@/lib/iotAuth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getDefaultTenantId } from "@/lib/tenant";
 
 type PollInput = {
   req: Request;
@@ -40,6 +41,7 @@ function bad(message: string, status = 400, extra?: Record<string, unknown>): Po
 
 export async function pollCommands(input: PollInput): Promise<PollOk | PollErr> {
   try {
+    const tenantId = getDefaultTenantId();
     const { req, limit } = input;
     const nowIso = input.nowIso ?? new Date().toISOString();
 
@@ -58,6 +60,7 @@ export async function pollCommands(input: PollInput): Promise<PollOk | PollErr> 
       const { data: gw, error: gwErr } = await admin
         .from("gateways")
         .select("id, serial")
+        .eq("tenant_id", tenantId)
         .eq("serial", serial)
         .maybeSingle();
 
@@ -83,7 +86,7 @@ export async function pollCommands(input: PollInput): Promise<PollOk | PollErr> 
 
       // best effort para serial na resposta
       try {
-        const { data: gw } = await admin.from("gateways").select("id, serial").eq("id", gatewayId).maybeSingle();
+        const { data: gw } = await admin.from("gateways").select("id, serial").eq("tenant_id", tenantId).eq("id", gatewayId).maybeSingle();
         if (gw?.serial) serial = gw.serial;
       } catch {}
     }
@@ -92,6 +95,7 @@ export async function pollCommands(input: PollInput): Promise<PollOk | PollErr> 
     const { data: cmds, error: cmdErr } = await admin
       .from("iot_commands")
       .select("id, cmd_id, tipo, payload, status, expires_at, created_at")
+      .eq("tenant_id", tenantId)
       .eq("gateway_id", gatewayId)
       .in("status", ["PENDENTE", "pendente", "pending"])
       .is("ack_at", null)
@@ -108,6 +112,7 @@ export async function pollCommands(input: PollInput): Promise<PollOk | PollErr> 
       const { error: upErr } = await admin
         .from("iot_commands")
         .update({ status: "ENVIADO" })
+        .eq("tenant_id", tenantId)
         .in("id", ids)
         .eq("gateway_id", gatewayId)
         .in("status", ["PENDENTE", "pendente", "pending"]);
@@ -117,7 +122,7 @@ export async function pollCommands(input: PollInput): Promise<PollOk | PollErr> 
 
     // Atualiza last_seen_at (best effort)
     try {
-      await admin.from("gateways").update({ last_seen_at: nowIso }).eq("id", gatewayId);
+      await admin.from("gateways").update({ last_seen_at: nowIso }).eq("tenant_id", tenantId).eq("id", gatewayId);
     } catch {}
 
     return {
@@ -203,6 +208,7 @@ export async function ackCommand(input: AckInput): Promise<AckOk | AckErr> {
     const machineId = data?.machine_id ? String(data.machine_id) : null;
     const code = data?.code ? String(data.code) : null;
 
+    const tenantId = getDefaultTenantId();
     const admin = supabaseAdmin() as any;
     const nowIso = new Date().toISOString();
     const ackAtIso = new Date(ts * 1000).toISOString();
@@ -211,6 +217,7 @@ export async function ackCommand(input: AckInput): Promise<AckOk | AckErr> {
     const { data: gw, error: gwErr } = await admin
       .from("gateways")
       .select("id, serial")
+      .eq("tenant_id", tenantId)
       .eq("serial", serial)
       .maybeSingle();
 
@@ -221,6 +228,7 @@ export async function ackCommand(input: AckInput): Promise<AckOk | AckErr> {
     const { data: cmdRow, error: cmdErr } = await admin
       .from("iot_commands")
       .select("id, cmd_id, tipo, status, condominio_maquinas_id")
+      .eq("tenant_id", tenantId)
       .eq("gateway_id", gw.id)
       .eq("cmd_id", cmdId)
       .maybeSingle();
@@ -234,13 +242,14 @@ export async function ackCommand(input: AckInput): Promise<AckOk | AckErr> {
     const { error: upErr } = await admin
       .from("iot_commands")
       .update({ status: newStatus, ack_at: ackAtIso })
+      .eq("tenant_id", tenantId)
       .eq("id", cmdRow.id)
       .eq("gateway_id", gw.id);
 
     if (upErr) return bad("db_error", 500, { detail: upErr.message });
 
     // last_seen_at best effort
-    await admin.from("gateways").update({ last_seen_at: nowIso }).eq("id", gw.id);
+    await admin.from("gateways").update({ last_seen_at: nowIso }).eq("tenant_id", tenantId).eq("id", gw.id);
 
     return { status: 200, body: { ok: true, serial, cmd_id: cmdId, status: newStatus } };
   } catch (e: any) {
@@ -307,10 +316,11 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
   const tsGw = toIntAny(ts, NaN);
   if (!Number.isFinite(tsGw)) return { status: 400, body: { ok: false, error: "invalid_ts" } };
 
+  const tenantId = getDefaultTenantId();
   const admin = supabaseAdmin() as any;
   const eventoIso = new Date(tsGw * 1000).toISOString();
 
-  const { data: gw, error: gwErr } = await admin.from("gateways").select("id, serial, condominio_id").eq("serial", serial).maybeSingle();
+  const { data: gw, error: gwErr } = await admin.from("gateways").select("id, serial, condominio_id").eq("tenant_id", tenantId).eq("serial", serial).maybeSingle();
   if (gwErr) return { status: 500, body: { ok: false, error: "db_error", detail: gwErr.message } };
   if (!gw) return { status: 404, body: { ok: false, error: "gateway_not_found" } };
 
@@ -323,6 +333,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
     const { data: c, error: cErr } = await admin
       .from("iot_commands")
       .select("id, cmd_id, status, tipo, payload, condominio_maquinas_id")
+      .eq("tenant_id", tenantId)
       .eq("gateway_id", gw.id)
       .eq("cmd_id", cmdId)
       .maybeSingle();
@@ -336,6 +347,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
     const { data: m, error: mErr } = await admin
       .from("condominio_maquinas")
       .select("id, identificador_local, gateway_id, condominio_id")
+      .eq("tenant_id", tenantId)
       .eq("gateway_id", gw.id)
       .eq("identificador_local", machineIdent)
       .maybeSingle();
@@ -346,7 +358,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
 
   const { data: evPt, error: evPtErr } = await admin
     .from("eventos_iot")
-    .insert({ gateway_id: gw.id, maquina_id: condominioMaquinasId, tipo, payload: payload ?? {}, created_at: eventoIso })
+    .insert({ tenant_id: tenantId, gateway_id: gw.id, maquina_id: condominioMaquinasId, tipo, payload: payload ?? {}, created_at: eventoIso })
     .select("id, created_at")
     .single();
 
@@ -377,7 +389,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
 
   async function updateCicloById(upd: any, whereStatus?: string) {
     if (!cicloId) return { did: false, reason: "no_ciclo_id" };
-    let q = admin.from("ciclos").update(upd).eq("id", cicloId);
+    let q = admin.from("ciclos").update(upd).eq("tenant_id", tenantId).eq("id", cicloId);
     if (whereStatus) q = q.eq("status", whereStatus);
     const { data, error } = await q.select("id,status").maybeSingle();
     if (error) {
@@ -394,6 +406,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
       const { data: c, error } = await admin
         .from("ciclos")
         .select("id,status,pulso_enviado_at,created_at")
+        .eq("tenant_id", tenantId)
         .eq("maquina_id", condominioMaquinasId)
         .eq("status", "LIBERADO")
         .is("busy_on_at", null)
@@ -407,6 +420,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
       const { data: u, error: uErr } = await admin
         .from("ciclos")
         .update({ busy_on_at: eventoIso, status: "EM_USO" })
+        .eq("tenant_id", tenantId)
         .eq("id", c.id)
         .eq("status", "LIBERADO")
         .select("id,status")
@@ -419,6 +433,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
       const { data: c, error } = await admin
         .from("ciclos")
         .select("id,status,busy_on_at,created_at")
+        .eq("tenant_id", tenantId)
         .eq("maquina_id", condominioMaquinasId)
         .eq("status", "EM_USO")
         .is("busy_off_at", null)
@@ -432,6 +447,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
       const { data: u, error: uErr } = await admin
         .from("ciclos")
         .update({ busy_off_at: eventoIso, status: "FINALIZADO" })
+        .eq("tenant_id", tenantId)
         .eq("id", c.id)
         .eq("status", "EM_USO")
         .select("id,status")
@@ -443,6 +459,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
     const { data: list, error } = await admin
       .from("ciclos")
       .select("id,created_at,status")
+      .eq("tenant_id", tenantId)
       .eq("maquina_id", condominioMaquinasId)
       .eq("status", "AGUARDANDO_LIBERACAO")
       .order("created_at", { ascending: true })
@@ -454,6 +471,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
     const { data: u, error: uErr } = await admin
       .from("ciclos")
       .update({ pulso_enviado_at: eventoIso, status: "LIBERADO" })
+      .eq("tenant_id", tenantId)
       .eq("id", c.id)
       .eq("status", "AGUARDANDO_LIBERACAO")
       .select("id,status")
@@ -472,7 +490,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
     if (cmdRow?.id) {
       const currStatus = String(cmdRow.status ?? "");
       if (currStatus === "ENVIADO" || currStatus === "ACK") {
-        await admin.from("iot_commands").update({ status: "EXECUTADO" }).eq("id", cmdRow.id).eq("gateway_id", gw.id);
+        await admin.from("iot_commands").update({ status: "EXECUTADO" }).eq("tenant_id", tenantId).eq("id", cmdRow.id).eq("gateway_id", gw.id);
       }
     }
 
@@ -562,8 +580,9 @@ export async function heartbeatGateway(input: HeartbeatInput): Promise<Heartbeat
   }
 
   try {
+    const tenantId = getDefaultTenantId();
     const admin = supabaseAdmin();
-    await admin.from("gateways").update({ last_seen_at: new Date().toISOString() }).eq("serial", auth.serial);
+    await admin.from("gateways").update({ last_seen_at: new Date().toISOString() }).eq("tenant_id", tenantId).eq("serial", auth.serial);
   } catch {
     // best effort
   }

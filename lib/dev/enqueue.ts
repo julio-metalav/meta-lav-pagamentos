@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getDefaultTenantId } from "@/lib/tenant";
 
 type EnqueueResult = {
   status: number;
@@ -30,11 +31,13 @@ export async function enqueueDevCommand(req: Request): Promise<EnqueueResult> {
 
     if (!serial) return bad("serial é obrigatório");
 
+    const tenantId = getDefaultTenantId();
     const admin = supabaseAdmin();
 
     const { data: gw, error: gwErr } = await admin
       .from("gateways")
       .select("id, serial")
+      .eq("tenant_id", tenantId)
       .eq("serial", serial)
       .maybeSingle();
 
@@ -47,6 +50,7 @@ export async function enqueueDevCommand(req: Request): Promise<EnqueueResult> {
       const { data: maq, error: maqErr } = await admin
         .from("condominio_maquinas")
         .select("id, gateway_id, ativa, identificador_local, tipo")
+        .eq("tenant_id", tenantId)
         .eq("gateway_id", gw.id)
         .eq("ativa", true)
         .order("updated_at", { ascending: false })
@@ -64,6 +68,7 @@ export async function enqueueDevCommand(req: Request): Promise<EnqueueResult> {
     const { data, error } = await admin
       .from("iot_commands")
       .insert({
+        tenant_id: tenantId,
         gateway_id: gw.id,
         condominio_maquinas_id: condominioMaquinasId,
         cmd_id,

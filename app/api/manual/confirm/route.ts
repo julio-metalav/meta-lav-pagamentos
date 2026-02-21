@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 import { POST as executeCyclePost } from "@/app/api/payments/execute-cycle/route";
 
 function normalizeMetodo(raw: unknown): string {
@@ -63,6 +64,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
     const correlation_id = String(
@@ -96,6 +98,7 @@ export async function POST(req: Request) {
     const { data: posDevice, error: posErr } = await sb
       .from("pos_devices")
       .select("id,serial,condominio_id")
+      .eq("tenant_id", tenantId)
       .eq("serial", pos_serial)
       .maybeSingle();
 
@@ -106,6 +109,7 @@ export async function POST(req: Request) {
     const { data: machine, error: machineErr } = await sb
       .from("condominio_maquinas")
       .select("id,condominio_id,gateway_id,identificador_local,ativa")
+      .eq("tenant_id", tenantId)
       .eq("id", condominio_maquinas_id)
       .eq("condominio_id", posDevice.condominio_id)
       .maybeSingle();
@@ -133,6 +137,7 @@ export async function POST(req: Request) {
       const { data: existingManual, error: manualErr } = await sb
         .from("pagamentos")
         .select("id,status")
+        .eq("tenant_id", tenantId)
         .eq("idempotency_key", manualIdempotencyKey)
         .maybeSingle();
       if (manualErr)
@@ -147,6 +152,7 @@ export async function POST(req: Request) {
   const { data: existingByRef, error: refErr } = await sb
     .from("pagamentos")
     .select("id,status")
+    .eq("tenant_id", tenantId)
     .eq("external_id", ref_externa)
     .maybeSingle();
 
@@ -163,6 +169,7 @@ export async function POST(req: Request) {
 
     if (!pagamentoId) {
       const insertPayload: Record<string, unknown> = {
+        tenant_id: tenantId,
         condominio_id: machine.condominio_id,
         maquina_id: machine.id,
         origem: "POS",
@@ -194,6 +201,7 @@ export async function POST(req: Request) {
       const { data: currentPay, error: curErr } = await sb
         .from("pagamentos")
         .select("id,status")
+        .eq("tenant_id", tenantId)
         .eq("id", pagamentoId)
         .maybeSingle();
 
@@ -210,6 +218,7 @@ export async function POST(req: Request) {
         const { error: ensurePaidErr } = await sb
           .from("pagamentos")
           .update({ status: "PAGO", paid_at: paidAtIso })
+          .eq("tenant_id", tenantId)
           .eq("id", pagamentoId)
           .eq("status", "CRIADO");
 

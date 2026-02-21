@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { parseAvailabilityInput } from "@/lib/payments/contracts";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 const PENDING_TTL_SEC = Number(process.env.PAYMENTS_PENDING_TTL_SEC || 300);
 
@@ -15,11 +16,13 @@ export async function POST(req: Request) {
     if (!parsed.ok) return jsonErrorCompat(parsed.message, 400, { code: parsed.code });
 
     const input = parsed.data;
+    const tenantId = getTenantIdFromRequest(req);
     const sb = supabaseAdmin() as any;
 
     const { data: machine, error: mErr } = await sb
       .from("condominio_maquinas")
       .select("id, condominio_id, ativa")
+      .eq("tenant_id", tenantId)
       .eq("id", input.condominio_maquinas_id)
       .eq("condominio_id", input.condominio_id)
       .maybeSingle();
@@ -30,6 +33,7 @@ export async function POST(req: Request) {
     const { data: openCycle, error: cErr } = await sb
       .from("ciclos")
       .select("id,status,eta_livre_at,created_at")
+      .eq("tenant_id", tenantId)
       .eq("maquina_id", input.condominio_maquinas_id)
       .in("status", ["AGUARDANDO_LIBERACAO", "LIBERADO", "EM_USO"])
       .order("created_at", { ascending: false })
@@ -65,6 +69,7 @@ export async function POST(req: Request) {
       const { error: abortErr } = await sb
         .from("ciclos")
         .update({ status: "ABORTADO" })
+        .eq("tenant_id", tenantId)
         .eq("id", openCycle.id)
         .eq("status", "AGUARDANDO_LIBERACAO");
 

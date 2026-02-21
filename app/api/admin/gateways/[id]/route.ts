@@ -4,13 +4,15 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
-export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const { id } = await ctx.params;
     const sb = supabaseAdmin() as any;
 
-    const { data, error } = await sb.from("gateways").select("id,serial,condominio_id,created_at").eq("id", id).maybeSingle();
+    const { data, error } = await sb.from("gateways").select("id,serial,condominio_id,created_at").eq("tenant_id", tenantId).eq("id", id).maybeSingle();
     if (error) return jsonErrorCompat("Erro ao buscar gateway.", 500, { code: "db_error", extra: { details: error.message } });
     if (!data) return jsonErrorCompat("gateway not found", 404, { code: "gateway_not_found" });
 
@@ -25,6 +27,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const { id } = await ctx.params;
     const body = await req.json().catch(() => ({}));
 
@@ -47,13 +50,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const sb = supabaseAdmin() as any;
 
     if (typeof patch.condominio_id === "string") {
-      const { data: cond, error: condErr } = await sb.from("condominios").select("id").eq("id", patch.condominio_id).maybeSingle();
+      const { data: cond, error: condErr } = await sb.from("condominios").select("id").eq("tenant_id", tenantId).eq("id", patch.condominio_id).maybeSingle();
       if (condErr) return jsonErrorCompat("Erro ao validar condomínio.", 500, { code: "db_error", extra: { details: condErr.message } });
       if (!cond) return jsonErrorCompat("condominio not found", 404, { code: "condominio_not_found" });
     }
 
     if (typeof patch.serial === "string") {
-      const { data: dup, error: dupErr } = await sb.from("gateways").select("id").eq("serial", patch.serial).neq("id", id).maybeSingle();
+      const { data: dup, error: dupErr } = await sb.from("gateways").select("id").eq("tenant_id", tenantId).eq("serial", patch.serial).neq("id", id).maybeSingle();
       if (dupErr) return jsonErrorCompat("Erro ao validar serial.", 500, { code: "db_error", extra: { details: dupErr.message } });
       if (dup) return jsonErrorCompat("Gateway já existe com este serial.", 409, { code: "duplicate_gateway_serial" });
     }
@@ -61,6 +64,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const { data, error } = await sb
       .from("gateways")
       .update(patch)
+      .eq("tenant_id", tenantId)
       .eq("id", id)
       .select("id,serial,condominio_id,created_at")
       .maybeSingle();

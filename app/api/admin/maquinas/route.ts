@@ -4,9 +4,11 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 export async function GET(req: Request) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const u = new URL(req.url);
     const condominio_id = String(u.searchParams.get("condominio_id") || "").trim();
 
@@ -14,6 +16,7 @@ export async function GET(req: Request) {
     let q = sb
       .from("condominio_maquinas")
       .select("id,condominio_id,identificador_local,tipo,gateway_id,pos_device_id,ativa,updated_at")
+      .eq("tenant_id", tenantId)
       .order("identificador_local", { ascending: true })
       .limit(300);
 
@@ -33,6 +36,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const body = await req.json().catch(() => ({}));
     const condominio_id = String(body?.condominio_id || "").trim();
     const identificador_local = String(body?.identificador_local || "").trim();
@@ -51,6 +55,7 @@ export async function POST(req: Request) {
     const { data: dupLocal, error: dupLocalErr } = await sb
       .from("condominio_maquinas")
       .select("id")
+      .eq("tenant_id", tenantId)
       .eq("condominio_id", condominio_id)
       .eq("identificador_local", identificador_local)
       .maybeSingle();
@@ -61,6 +66,7 @@ export async function POST(req: Request) {
     const { data: dupGateway, error: dupGwErr } = await sb
       .from("condominio_maquinas")
       .select("id")
+      .eq("tenant_id", tenantId)
       .eq("gateway_id", gateway_id)
       .eq("ativa", true)
       .maybeSingle();
@@ -71,6 +77,7 @@ export async function POST(req: Request) {
     const { data: created, error: createErr } = await sb
       .from("condominio_maquinas")
       .insert({
+        tenant_id: tenantId,
         condominio_id,
         identificador_local,
         tipo,

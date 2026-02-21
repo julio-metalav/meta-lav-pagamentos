@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { authenticateGateway } from "@/lib/iotAuth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getDefaultTenantId } from "@/lib/tenant";
 
 /**
  * Simulação: confirma um pagamento CRIADO para o gateway (marca como PAGO).
@@ -38,11 +39,13 @@ if (vercelEnv === "production" && !allowInCi) {
     );
   }
 
+  const tenantId = getDefaultTenantId();
   const sb = supabaseAdmin() as any;
 
   const { data: gw, error: gwErr } = await sb
     .from("gateways")
     .select("id")
+    .eq("tenant_id", tenantId)
     .eq("serial", auth.serial)
     .maybeSingle();
 
@@ -62,6 +65,7 @@ if (vercelEnv === "production" && !allowInCi) {
   const { data: machineIds, error: machErr } = await sb
     .from("condominio_maquinas")
     .select("id")
+    .eq("tenant_id", tenantId)
     .eq("gateway_id", gw.id)
     .eq("ativa", true);
 
@@ -77,6 +81,7 @@ if (vercelEnv === "production" && !allowInCi) {
   const { data: pay, error: payErr } = await sb
     .from("pagamentos")
     .select("id, status")
+    .eq("tenant_id", tenantId)
     .eq("status", "CRIADO")
     .in("maquina_id", ids)
     .order("created_at", { ascending: true })
@@ -101,6 +106,7 @@ if (vercelEnv === "production" && !allowInCi) {
       external_id: providerRef,
       gateway_pagamento: "STONE",
     })
+    .eq("tenant_id", tenantId)
     .eq("id", pay.id)
     .select("id, status")
     .maybeSingle();

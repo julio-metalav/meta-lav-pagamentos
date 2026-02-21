@@ -4,15 +4,17 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 export async function GET(req: Request) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const u = new URL(req.url);
     const condominio_id = String(u.searchParams.get("condominio_id") || "").trim();
     const search = String(u.searchParams.get("search") || "").trim();
 
     const sb = supabaseAdmin() as any;
-    let q = sb.from("pos_devices").select("id,serial,condominio_id,updated_at").order("updated_at", { ascending: false }).limit(200);
+    let q = sb.from("pos_devices").select("id,serial,condominio_id,updated_at").eq("tenant_id", tenantId).order("updated_at", { ascending: false }).limit(200);
     if (condominio_id) q = q.eq("condominio_id", condominio_id);
     if (search) q = q.ilike("serial", `%${search}%`);
 
@@ -30,6 +32,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const body = await req.json().catch(() => ({}));
     const serial = String(body?.serial || "").trim();
     const condominio_id = String(body?.condominio_id || "").trim();
@@ -38,11 +41,11 @@ export async function POST(req: Request) {
     if (!condominio_id) return jsonErrorCompat("condominio_id é obrigatório.", 400, { code: "missing_condominio_id" });
 
     const sb = supabaseAdmin() as any;
-    const { data: dup, error: dupErr } = await sb.from("pos_devices").select("id").eq("serial", serial).maybeSingle();
+    const { data: dup, error: dupErr } = await sb.from("pos_devices").select("id").eq("tenant_id", tenantId).eq("serial", serial).maybeSingle();
     if (dupErr) return jsonErrorCompat("Erro ao validar POS serial.", 500, { code: "db_error", extra: { details: dupErr.message } });
     if (dup) return jsonErrorCompat("POS já existe com este serial.", 409, { code: "duplicate_pos_serial" });
 
-    const { data, error } = await sb.from("pos_devices").insert({ serial, condominio_id }).select("id,serial,condominio_id,updated_at").single();
+    const { data, error } = await sb.from("pos_devices").insert({ tenant_id: tenantId, serial, condominio_id }).select("id,serial,condominio_id,updated_at").single();
     if (error) return jsonErrorCompat("Erro ao criar POS device.", 500, { code: "db_error", extra: { details: error.message } });
 
     return NextResponse.json({ ok: true, item: data }, { status: 201 });

@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { parseAuthorizeInput } from "@/lib/payments/contracts";
 import { isPosCanaryAllowed } from "@/lib/payments/rollout";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 const NEXUS_COMMIT = process.env.VERCEL_GIT_COMMIT_SHA ?? "unknown";
 
@@ -23,6 +24,7 @@ function withCommitHeader(res: NextResponse): NextResponse {
  */
 export async function POST(req: Request) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const supabase = supabaseAdmin() as any;
 
     let body: unknown = {};
@@ -50,6 +52,7 @@ export async function POST(req: Request) {
     const { data: posDevice, error: posErr } = await supabase
       .from("pos_devices")
       .select("id, serial, condominio_id")
+      .eq("tenant_id", tenantId)
       .eq("serial", headerPosSerial)
       .maybeSingle();
 
@@ -120,6 +123,7 @@ export async function POST(req: Request) {
     const { data: identMatches, error: identErr } = await supabase
       .from("condominio_maquinas")
       .select("id,ativa")
+      .eq("tenant_id", tenantId)
       .eq("condominio_id", condominio_id)
       .eq("identificador_local", identificador_local)
       .limit(2);
@@ -143,6 +147,7 @@ export async function POST(req: Request) {
     const { data: maquina, error: maqErr } = await supabase
       .from("condominio_maquinas")
       .select("id, condominio_id, gateway_id, ativa, pos_device_id")
+      .eq("tenant_id", tenantId)
       .eq("condominio_id", condominio_id)
       .eq("identificador_local", identificador_local)
       .eq("ativa", true)
@@ -206,6 +211,7 @@ export async function POST(req: Request) {
     const { data: existingPay, error: existErr } = await supabase
       .from("pagamentos")
       .select("id, status, created_at")
+      .eq("tenant_id", tenantId)
       .eq("idempotency_key", idempotency_key)
       .maybeSingle();
 
@@ -230,6 +236,7 @@ export async function POST(req: Request) {
     const { data: pagamento, error: payErr } = await supabase
       .from("pagamentos")
       .insert({
+        tenant_id: tenantId,
         condominio_id,
         maquina_id: maquina.id,
         origem: "POS",

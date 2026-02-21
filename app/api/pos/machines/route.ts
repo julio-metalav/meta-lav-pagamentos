@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 export async function GET(req: Request) {
   try {
@@ -21,12 +22,14 @@ export async function GET(req: Request) {
       return jsonErrorCompat("x-pos-serial é obrigatório.", 400, { code: "missing_pos_serial" });
     }
 
+    const tenantId = getTenantIdFromRequest(req);
     const sb = supabaseAdmin() as any;
 
     // Buscar POS pelo x-pos-serial
     const { data: pos, error: posErr } = await sb
       .from("pos_devices")
       .select("id,condominio_id")
+      .eq("tenant_id", tenantId)
       .eq("serial", pos_serial)
       .maybeSingle();
 
@@ -59,6 +62,7 @@ export async function GET(req: Request) {
     const { data: machines, error: machinesErr } = await sb
       .from("condominio_maquinas")
       .select("id,identificador_local,tipo,ativa,pos_device_id,condominio_id")
+      .eq("tenant_id", tenantId)
       .eq("pos_device_id", pos.id)
       .eq("ativa", true)
       .order("identificador_local", { ascending: true });

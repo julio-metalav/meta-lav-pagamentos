@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 type MachineStatus = "AVAILABLE" | "PENDING" | "IN_USE" | "ERROR";
 
@@ -73,6 +74,7 @@ function computeStatus(cycle: CycleRow | undefined, nowMs: number) {
 
 export async function GET(req: Request) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const url = new URL(req.url);
     const condominioId = String(url.searchParams.get("condominio_id") || "").trim();
     const includeInactive = url.searchParams.get("include_inactive") === "true";
@@ -83,6 +85,7 @@ export async function GET(req: Request) {
     let machinesQuery = sb
       .from("condominio_maquinas")
       .select("id,condominio_id,identificador_local,tipo,ativa,gateway_id,pos_device_id,updated_at")
+      .eq("tenant_id", tenantId)
       .order("identificador_local", { ascending: true })
       .limit(limit);
 
@@ -103,6 +106,7 @@ export async function GET(req: Request) {
       const { data: cyclesData, error: cyclesErr } = await sb
         .from("ciclos")
         .select("id,maquina_id,status,created_at,busy_on_at,busy_off_at")
+        .eq("tenant_id", tenantId)
         .in("maquina_id", machineIds)
         .order("created_at", { ascending: false });
 

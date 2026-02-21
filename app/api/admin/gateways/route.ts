@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 function parseQuery(url: string) {
   const u = new URL(url);
@@ -16,6 +17,7 @@ function parseQuery(url: string) {
 
 export async function GET(req: Request) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const { search, condominio_id, page, limit } = parseQuery(req.url);
     const from = (page - 1) * limit;
     const to = from + limit - 1;
@@ -25,6 +27,7 @@ export async function GET(req: Request) {
     let q = sb
       .from("gateways")
       .select("id,serial,condominio_id,created_at", { count: "exact" })
+      .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false })
       .range(from, to);
 
@@ -52,6 +55,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const body = await req.json().catch(() => ({}));
     const serial = String(body?.serial || "").trim();
     const condominio_id = String(body?.condominio_id || "").trim();
@@ -61,17 +65,17 @@ export async function POST(req: Request) {
 
     const sb = supabaseAdmin() as any;
 
-    const { data: cond, error: condErr } = await sb.from("condominios").select("id").eq("id", condominio_id).maybeSingle();
+    const { data: cond, error: condErr } = await sb.from("condominios").select("id").eq("tenant_id", tenantId).eq("id", condominio_id).maybeSingle();
     if (condErr) return jsonErrorCompat("Erro ao validar condomínio.", 500, { code: "db_error", extra: { details: condErr.message } });
     if (!cond) return jsonErrorCompat("condominio not found", 404, { code: "condominio_not_found" });
 
-    const { data: dup, error: dupErr } = await sb.from("gateways").select("id,serial").eq("serial", serial).maybeSingle();
+    const { data: dup, error: dupErr } = await sb.from("gateways").select("id,serial").eq("tenant_id", tenantId).eq("serial", serial).maybeSingle();
     if (dupErr) return jsonErrorCompat("Erro ao validar serial do gateway.", 500, { code: "db_error", extra: { details: dupErr.message } });
     if (dup) return jsonErrorCompat("Gateway já existe com este serial.", 409, { code: "duplicate_gateway_serial" });
 
     const { data, error } = await sb
       .from("gateways")
-      .insert({ serial, condominio_id })
+      .insert({ tenant_id: tenantId, serial, condominio_id })
       .select("id,serial,condominio_id,created_at")
       .single();
 

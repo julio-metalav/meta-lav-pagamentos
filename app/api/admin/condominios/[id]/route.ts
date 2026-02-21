@@ -4,13 +4,15 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
-export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const { id } = await ctx.params;
     const sb = supabaseAdmin() as any;
 
-    const { data, error } = await sb.from("condominios").select("id,nome").eq("id", id).maybeSingle();
+    const { data, error } = await sb.from("condominios").select("id,nome").eq("tenant_id", tenantId).eq("id", id).maybeSingle();
     if (error) return jsonErrorCompat("Erro ao buscar condomínio.", 500, { code: "db_error", extra: { details: error.message } });
     if (!data) return jsonErrorCompat("condominio not found", 404, { code: "condominio_not_found" });
 
@@ -25,6 +27,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
+    const tenantId = getTenantIdFromRequest(req);
     const { id } = await ctx.params;
     const body = await req.json().catch(() => ({}));
 
@@ -40,7 +43,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
     const sb = supabaseAdmin() as any;
 
-    const { data, error } = await sb.from("condominios").update(patch).eq("id", id).select("id,nome").maybeSingle();
+    const { data, error } = await sb.from("condominios").update(patch).eq("tenant_id", tenantId).eq("id", id).select("id,nome").maybeSingle();
 
     if (error) return jsonErrorCompat("Erro ao atualizar condomínio.", 500, { code: "db_error", extra: { details: error.message } });
     if (!data) return jsonErrorCompat("condominio not found", 404, { code: "condominio_not_found" });

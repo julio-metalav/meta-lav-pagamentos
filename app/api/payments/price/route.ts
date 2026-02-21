@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { parsePriceInput } from "@/lib/payments/contracts";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 function pickAmountCents(row: Record<string, any>): number | null {
   const centsCandidates = ["valor_centavos", "preco_centavos", "amount_centavos"];
@@ -37,11 +38,13 @@ export async function POST(req: Request) {
     if (!parsed.ok) return jsonErrorCompat(parsed.message, 400, { code: parsed.code });
 
     const input = parsed.data;
+    const tenantId = getTenantIdFromRequest(req);
     const sb = supabaseAdmin() as any;
 
     const { data: machine, error: mErr } = await sb
       .from("condominio_maquinas")
       .select("id, condominio_id, tipo, ativa")
+      .eq("tenant_id", tenantId)
       .eq("id", input.condominio_maquinas_id)
       .eq("condominio_id", input.condominio_id)
       .maybeSingle();

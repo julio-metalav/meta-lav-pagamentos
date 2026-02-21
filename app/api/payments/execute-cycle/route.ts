@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { parseExecuteCycleInput } from "@/lib/payments/contracts";
+import { getTenantIdFromRequest } from "@/lib/tenant";
 
 const PENDING_TTL_SEC = Number(process.env.PAYMENTS_PENDING_TTL_SEC || 300);
 
@@ -21,11 +22,13 @@ export async function POST(req: Request) {
     if (!parsed.ok) return jsonErrorCompat(parsed.message, 400, { code: parsed.code });
 
     const input = parsed.data;
+    const tenantId = getTenantIdFromRequest(req);
     const sb = supabaseAdmin() as any;
 
     const { data: pay, error: payErr } = await sb
       .from("pagamentos")
       .select("id,status,condominio_id")
+      .eq("tenant_id", tenantId)
       .eq("id", input.payment_id)
       .maybeSingle();
 
@@ -39,6 +42,7 @@ export async function POST(req: Request) {
     const { data: machine, error: mErr } = await sb
       .from("condominio_maquinas")
       .select("id,gateway_id,identificador_local,tipo,condominio_id,ativa")
+      .eq("tenant_id", tenantId)
       .eq("id", input.condominio_maquinas_id)
       .eq("condominio_id", pay.condominio_id)
       .maybeSingle();
@@ -50,6 +54,7 @@ export async function POST(req: Request) {
     const { data: existingCycle, error: exCycleErr } = await sb
       .from("ciclos")
       .select("id,status,created_at")
+      .eq("tenant_id", tenantId)
       .eq("pagamento_id", input.payment_id)
       .eq("maquina_id", machine.id)
       .order("created_at", { ascending: false })
@@ -67,6 +72,7 @@ export async function POST(req: Request) {
         const { error: abortErr } = await sb
           .from("ciclos")
           .update({ status: "ABORTADO" })
+          .eq("tenant_id", tenantId)
           .eq("id", existingCycle.id)
           .eq("status", "AGUARDANDO_LIBERACAO");
 
@@ -87,6 +93,7 @@ export async function POST(req: Request) {
       const { data: newCycle, error: cErr } = await sb
         .from("ciclos")
         .insert({
+          tenant_id: tenantId,
           pagamento_id: input.payment_id,
           condominio_id: pay.condominio_id,
           maquina_id: machine.id,
@@ -105,6 +112,7 @@ export async function POST(req: Request) {
     const { data: existingCmdByCycle, error: exCmdCycleErr } = await sb
       .from("iot_commands")
       .select("id,cmd_id,payload,created_at")
+      .eq("tenant_id", tenantId)
       .eq("gateway_id", machine.gateway_id)
       .filter("payload->>execute_idempotency_key", "eq", input.idempotency_key)
       .filter("payload->>ciclo_id", "eq", String(cycleId))
@@ -134,6 +142,7 @@ export async function POST(req: Request) {
     const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
     const { error: cmdErr } = await sb.from("iot_commands").insert({
+      tenant_id: tenantId,
       gateway_id: machine.gateway_id,
       condominio_maquinas_id: machine.id,
       pagamento_id: input.payment_id,

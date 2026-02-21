@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getDefaultTenantId } from "@/lib/tenant";
 
 type ScanResult = {
   status: number;
@@ -303,11 +304,13 @@ export async function scanUndeliveredPaid(req: Request): Promise<ScanResult> {
     const now = Date.now();
     const cutoffIso = new Date(now - slaSec * 1000).toISOString();
 
+    const tenantId = getDefaultTenantId();
     const admin = supabaseAdmin() as any;
 
     const { data: candidates, error: candErr } = await admin
       .from("pagamentos")
       .select("id,status,paid_at,created_at,maquina_id,condominio_id")
+      .eq("tenant_id", tenantId)
       .eq("status", "PAGO")
       .not("paid_at", "is", null)
       .lte("paid_at", cutoffIso)
@@ -334,6 +337,7 @@ export async function scanUndeliveredPaid(req: Request): Promise<ScanResult> {
       const { data: cycle, error: cErr } = await admin
         .from("ciclos")
         .select("id,status,created_at")
+        .eq("tenant_id", tenantId)
         .eq("pagamento_id", p.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -359,6 +363,7 @@ export async function scanUndeliveredPaid(req: Request): Promise<ScanResult> {
       const { data: updated, error: uErr } = await admin
         .from("pagamentos")
         .update({ status: "EXPIRADO" })
+        .eq("tenant_id", tenantId)
         .eq("id", p.id)
         .eq("status", "PAGO")
         .select("id,status")
@@ -402,11 +407,13 @@ export async function executeExpiredCompensation(req: Request): Promise<ScanResu
     const body = await req.json().catch(() => ({}));
     const limit = Math.min(100, Math.max(1, Number(body?.limit || 50)));
 
+    const tenantId = getDefaultTenantId();
     const admin = supabaseAdmin() as any;
 
     const { data: candidates, error: candErr } = await admin
       .from("pagamentos")
       .select("id,status,gateway_pagamento,external_id,paid_at,created_at")
+      .eq("tenant_id", tenantId)
       .eq("status", "EXPIRADO")
       .order("paid_at", { ascending: true })
       .limit(limit);
@@ -441,6 +448,7 @@ export async function executeExpiredCompensation(req: Request): Promise<ScanResu
       const { data: updated, error: uErr } = await admin
         .from("pagamentos")
         .update({ status: "ESTORNADO" })
+        .eq("tenant_id", tenantId)
         .eq("id", p.id)
         .eq("status", "EXPIRADO")
         .select("id,status")
@@ -477,17 +485,19 @@ export async function compensationStatus(req: Request): Promise<ScanResult> {
   try {
     if (!isAuthorized(req)) return bad("Não autorizado", 401);
 
+    const tenantId = getDefaultTenantId();
     const admin = supabaseAdmin() as any;
     const nowIso = new Date().toISOString();
     const staleCutoffIso = new Date(Date.now() - PENDING_TTL_SEC * 1000).toISOString();
 
     const [{ count: expiredCount }, { count: paidCount }, { count: refundedCount }, { count: stalePendingCount }] = await Promise.all([
-      admin.from("pagamentos").select("id", { count: "exact", head: true }).eq("status", "EXPIRADO"),
-      admin.from("pagamentos").select("id", { count: "exact", head: true }).eq("status", "PAGO"),
-      admin.from("pagamentos").select("id", { count: "exact", head: true }).eq("status", "ESTORNADO"),
+      admin.from("pagamentos").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "EXPIRADO"),
+      admin.from("pagamentos").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "PAGO"),
+      admin.from("pagamentos").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "ESTORNADO"),
       admin
         .from("ciclos")
         .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
         .eq("status", "AGUARDANDO_LIBERACAO")
         .lte("created_at", staleCutoffIso),
     ]);
