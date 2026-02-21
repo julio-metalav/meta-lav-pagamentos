@@ -49,3 +49,7 @@ next-env.d.ts
 .aider.chat.history.md
 .aider.input.history
 .aider.tags.cache.v4/
+
+# local tooling
+.cursor/
+*.bak
