@@ -53,6 +53,31 @@ function parseUiState(payment: PaymentRow, cycle?: CycleRow | null, command?: Co
   return "ERRO";
 }
 
+/** Prioridade para escolher o "ciclo atual" do pagamento: preferir o que mais progrediu (evita mostrar órfão AGUARDANDO_LIBERACAO). */
+function cycleStatusPriority(s: string | null): number {
+  const u = String(s ?? "").toUpperCase();
+  if (u === "FINALIZADO") return 4;
+  if (u === "EM_USO") return 3;
+  if (u === "LIBERADO") return 2;
+  if (u === "AGUARDANDO_LIBERACAO") return 1;
+  return 0;
+}
+
+/** Dado vários ciclos do mesmo pagamento (já ordenados por created_at desc), retorna o de maior prioridade de status. */
+function pickBestCycleByStatus<T extends { status: string | null; created_at?: string | null }>(rows: T[]): T | null {
+  if (!rows?.length) return null;
+  let best = rows[0];
+  let bestPri = cycleStatusPriority(best.status);
+  for (let i = 1; i < rows.length; i++) {
+    const p = cycleStatusPriority(rows[i].status);
+    if (p > bestPri) {
+      best = rows[i];
+      bestPri = p;
+    }
+  }
+  return best;
+}
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
@@ -72,18 +97,19 @@ export async function GET(req: Request) {
     if (payErr) return jsonErrorCompat("Erro ao buscar pagamento.", 500, { code: "db_error", extra: { details: payErr.message } });
     if (!payment) return jsonErrorCompat("Pagamento não encontrado.", 404, { code: "payment_not_found" });
 
-    const { data: cycle, error: cycleErr } = await sb
+    const { data: cycleRows, error: cycleErr } = await sb
       .from("ciclos")
       .select("id,status,maquina_id,condominio_id,created_at")
       .eq("tenant_id", tenantId)
       .eq("pagamento_id", pagamentoId)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(20);
 
     if (cycleErr) {
       return jsonErrorCompat("Erro ao buscar ciclo.", 500, { code: "db_error", extra: { details: cycleErr.message } });
     }
+
+    const cycle = pickBestCycleByStatus((cycleRows ?? []) as CycleRow[]);
 
     let command: CommandRow | null = null;
     try {
