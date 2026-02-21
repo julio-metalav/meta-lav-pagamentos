@@ -38,7 +38,11 @@ const GW_SERIAL = process.env.GW_SERIAL || process.env.GATEWAY_SERIAL || fixture
 const GW_ID = process.env.GATEWAY_ID || "";
 
 const serialNorm = GW_SERIAL.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
-const HMAC_SECRET = process.env[`IOT_HMAC_SECRET__${serialNorm}`] || process.env.IOT_HMAC_SECRET || "";
+const HMAC_SECRET = process.env[`IOT_HMAC_SECRET__${serialNorm}`] || "";
+const gwHex = Buffer.from(String(GW_SERIAL), "utf8").toString("hex");
+console.log(`[debug] GW_SERIAL len=${String(GW_SERIAL).length} hex=${gwHex}`);
+console.log(`[debug] serialNorm=${serialNorm} envKey=IOT_HMAC_SECRET__${serialNorm} hasSecret=${HMAC_SECRET ? "yes" : "no"}`);
+
 
 // Optional: Vercel Protection Bypass (staging)
 const STAGING_VERCEL_BYPASS_TOKEN = process.env.STAGING_VERCEL_BYPASS_TOKEN || "";
@@ -87,7 +91,7 @@ async function callJson(path, method = "GET", bodyObj = undefined, opts = {}) {
 }
 
 async function callIoT(path, method = "GET", bodyObj = undefined) {
-  if (!HMAC_SECRET) fail(`HMAC secret ausente para serial ${GW_SERIAL} (defina IOT_HMAC_SECRET__${serialNorm} ou IOT_HMAC_SECRET)`);
+  if (!HMAC_SECRET) fail(`HMAC secret ausente para serial ${GW_SERIAL} (defina IOT_HMAC_SECRET__${serialNorm})`);
   const ts = Math.floor(Date.now() / 1000).toString();
   const bodyStr = bodyObj ? JSON.stringify(bodyObj) : "";
   const headers = { "x-gw-serial": GW_SERIAL, "x-gw-ts": ts, "x-gw-sign": sign(ts, bodyStr) };
@@ -137,17 +141,32 @@ async function waitForCondition(label, fn, opts = {}) {
 }
 
 async function expectIotCommandStatus(cmdId, expectedStatuses, opts = {}) {
-  const allow = (Array.isArray(expectedStatuses) ? expectedStatuses : [expectedStatuses]).map((s) => String(s).toUpperCase());
+  const allow = (Array.isArray(expectedStatuses) ? expectedStatuses : [expectedStatuses])
+    .map((s) => String(s).toUpperCase());
+
   await waitForCondition(`iot_commands:${cmdId}:${allow.join("|")}`, async () => {
-    const row = await supabaseSelect(
+    // 1) Tenta buscar por id (iot_commands.id)
+    let row = await supabaseSelect(
       "iot_commands",
-      { select: "cmd_id,status,ack_at", cmd_id: `eq.${cmdId}` },
+      { select: "id,cmd_id,status,ack_at", id: `eq.${cmdId}` },
       { single: true }
     );
+
+    // 2) Se não encontrar, tenta por cmd_id
+    if (!row) {
+      row = await supabaseSelect(
+        "iot_commands",
+        { select: "id,cmd_id,status,ack_at", cmd_id: `eq.${cmdId}` },
+        { single: true }
+      );
+    }
+
     if (!row) return false;
+
     const current = String(row.status || "").toUpperCase();
     if (!allow.includes(current)) return false;
     if (opts.requireAckAt && !row.ack_at) return false;
+
     return true;
   }, opts);
 }
