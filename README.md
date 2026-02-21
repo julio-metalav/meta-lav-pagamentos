@@ -10,6 +10,10 @@ Todos os scripts em `scripts/` exigem a variável **ENV** para evitar mistura de
   - `ENV=ci` → `.env.ci.local`
   - `ENV=prod` → `.env.prod.local`
 
+### Multi-tenant
+
+O banco (Supabase) é multi-tenant: tabelas como `condominios`, `gateways`, `pos_devices`, `condominio_maquinas`, `pagamentos`, `ciclos`, `iot_commands`, `eventos_iot` exigem `tenant_id` (FK para `public.tenants`). Por enquanto o sistema opera com **um único tenant** (Meta-Lav). O runtime usa `lib/tenant`: `getDefaultTenantId()` lê `DEFAULT_TENANT_ID` do env (fallback para o UUID Meta-Lav). Defina `DEFAULT_TENANT_ID` em `.env.local` (veja `.env.example`). No futuro, multi-tenant real poderá usar header `x-tenant` ou JWT para escolher o tenant por request.
+
 ### Exemplos
 
 ```bash
