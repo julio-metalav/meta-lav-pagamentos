@@ -38,7 +38,7 @@ const GW_SERIAL = process.env.GW_SERIAL || process.env.GATEWAY_SERIAL || fixture
 const GW_ID = process.env.GATEWAY_ID || "";
 
 const serialNorm = GW_SERIAL.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
-const HMAC_SECRET = process.env[`IOT_HMAC_SECRET__${serialNorm}`] || process.env.IOT_HMAC_SECRET || "";
+const HMAC_SECRET = process.env[`IOT_HMAC_SECRET__${serialNorm}`] || "";
 
 // Optional: Vercel Protection Bypass (staging)
 const STAGING_VERCEL_BYPASS_TOKEN = process.env.STAGING_VERCEL_BYPASS_TOKEN || "";
@@ -87,7 +87,7 @@ async function callJson(path, method = "GET", bodyObj = undefined, opts = {}) {
 }
 
 async function callIoT(path, method = "GET", bodyObj = undefined) {
-  if (!HMAC_SECRET) fail(`HMAC secret ausente para serial ${GW_SERIAL} (defina IOT_HMAC_SECRET__${serialNorm} ou IOT_HMAC_SECRET)`);
+  if (!HMAC_SECRET) fail(`HMAC secret ausente para serial ${GW_SERIAL} (defina IOT_HMAC_SECRET__${serialNorm})`);
   const ts = Math.floor(Date.now() / 1000).toString();
   const bodyStr = bodyObj ? JSON.stringify(bodyObj) : "";
   const headers = { "x-gw-serial": GW_SERIAL, "x-gw-ts": ts, "x-gw-sign": sign(ts, bodyStr) };
