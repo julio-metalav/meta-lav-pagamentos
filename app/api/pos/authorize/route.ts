@@ -223,7 +223,7 @@ export async function POST(req: Request) {
       }));
     }
 
-    // Pagamento (PT-BR) — sem ciclo/comando nesta etapa
+    // Pagamento (PT-BR) — sem ciclo/comando nesta etapa. status explícito para fake-gateway-confirm e manual/confirm.
     const { data: pagamento, error: payErr } = await supabase
       .from("pagamentos")
       .insert({
@@ -235,6 +235,7 @@ export async function POST(req: Request) {
         valor_centavos,
         idempotency_key,
         external_id: null,
+        status: "CRIADO",
       })
       .select("id, status, created_at")
       .single();

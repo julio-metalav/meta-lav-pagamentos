@@ -163,6 +163,25 @@ async function sendHeartbeat() {
   }
 }
 
+/** Simula confirmação de pagamento no backend (CRIADO → PAGO) para permitir execute-cycle em seguida. */
+async function sendFakeConfirm() {
+  try {
+    const res = await fetchWithRetry("/api/dev/fake-gateway-confirm", { method: "POST", body: {} });
+    const text = await res.text();
+    let json = {};
+    try {
+      json = JSON.parse(text || "{}");
+    } catch {}
+    if (res.status === 200 && json.confirmed) {
+      logStep("fake_confirm", { status: res.status, info: `payment_id=${json.payment_id ?? "-"}` });
+    }
+  } catch (err) {
+    if (!err.message?.includes("404") && !err.message?.includes("only_allowed_in_preview")) {
+      logStep("fake_confirm_fail", { status: "error", info: err.message });
+    }
+  }
+}
+
 function extractMachineId(command) {
   const payload = command?.payload || {};
   return (
@@ -243,6 +262,8 @@ async function loop() {
       await sendHeartbeat();
       lastHeartbeatAt = Date.now();
     }
+
+    await sendFakeConfirm();
 
     let pollJson;
     try {
