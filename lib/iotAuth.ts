@@ -63,6 +63,8 @@ export function authenticateGateway(req: Request, rawBody: string): AuthOk | Aut
   }
 
   const envKey = `IOT_HMAC_SECRET__${safeSerialToEnvKey(serial)}`;
+  const hasSpecific = !!process.env[envKey];
+  const hasFallback = !!process.env.IOT_HMAC_SECRET;
   const secret = process.env[envKey] || process.env.IOT_HMAC_SECRET;
 
   if (!secret) {
@@ -78,7 +80,27 @@ export function authenticateGateway(req: Request, rawBody: string): AuthOk | Aut
     .toLowerCase();
 
   if (!timingSafeEqualHex(sign, expected)) {
-    return { ok: false, status: 401, error: "invalid_hmac" };
+    const debugOn = process.env.DEBUG_HMAC === "1";
+    const usedFallback = !hasSpecific && hasFallback;
+
+    return {
+      ok: false,
+      status: 401,
+      error: "invalid_hmac",
+      ...(debugOn
+        ? {
+            detail: JSON.stringify({
+              serial_received: serial,
+              env_key: envKey,
+              has_specific_secret: hasSpecific,
+              has_fallback_secret: hasFallback,
+              used_fallback: usedFallback,
+              ts: tsStr,
+              rawBodyLen: (rawBody ?? "").length,
+            }),
+          }
+        : {}),
+    };
   }
 
   return { ok: true, serial };
