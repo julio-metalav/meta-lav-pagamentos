@@ -111,4 +111,5 @@ jobs:
           set -a
           source .env.local
           set +a
+          echo "ENVFILE_PREVIEW:"; grep -E "^(BASE_URL|POS_SERIAL|IDENTIFICADOR_LOCAL|CONDOMINIO_MAQUINAS_ID|GW_SERIAL|GATEWAY_ID)=" .env.local || true; 
           node scripts/e2e-full.mjs
