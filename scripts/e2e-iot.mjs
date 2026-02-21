@@ -26,12 +26,10 @@ const serial = process.env.GW_SERIAL || fixture.gw_serial || "GW-TESTE-001";
 
 const serialNorm = serial.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
 const secret =
-  process.env[`IOT_HMAC_SECRET__${serialNorm}`] ||
-  process.env.IOT_HMAC_SECRET ||
-  "";
+  process.env[`IOT_HMAC_SECRET__${serialNorm}`] || "";
 
 if (!secret) {
-  console.error("Faltou secret. Defina IOT_HMAC_SECRET__" + serialNorm + " ou IOT_HMAC_SECRET no .env do ambiente.");
+  console.error("Faltou secret. Defina IOT_HMAC_SECRET__" + serialNorm + " no .env do ambiente.");
   process.exit(1);
 }
 

@@ -14,10 +14,10 @@ try {
   run("node scripts/db-introspect.js");
 
   // e2e-iot depende de segredo; se faltar, não quebra smoke local
-  if (process.env.IOT_HMAC_SECRET__GW_TESTE_001 || process.env.IOT_HMAC_SECRET) {
+  if (process.env.IOT_HMAC_SECRET__GW_TESTE_001) {
     run("node scripts/e2e-iot.mjs");
   } else {
-    console.log("[smoke] skip e2e-iot: faltou IOT_HMAC_SECRET__GW_TESTE_001 ou IOT_HMAC_SECRET");
+    console.log("[smoke] skip e2e-iot: faltou IOT_HMAC_SECRET__GW_TESTE_001");
   }
 
   // e2e-payments depende de env de contexto (POS + condomínio + máquina)

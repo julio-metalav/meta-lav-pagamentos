@@ -40,8 +40,8 @@ function timingSafeEqualHex(aHex: string, bHex: string) {
  *   `${serial}.${ts}.${rawBody}`
  *
  * Secret:
- * - process.env[`IOT_HMAC_SECRET__${SERIAL_SANITIZADO}`]
- * - fallback: process.env.IOT_HMAC_SECRET
+ * - Exclusivamente process.env[`IOT_HMAC_SECRET__${SERIAL_SANITIZADO}`]
+ * - Sem fallback; se ausente → 500 missing_secret com detail=envKey
  */
 export function authenticateGateway(req: Request, rawBody: string): AuthOk | AuthFail {
   const serial = (req.headers.get("x-gw-serial") || "").trim();
@@ -63,9 +63,7 @@ export function authenticateGateway(req: Request, rawBody: string): AuthOk | Aut
   }
 
   const envKey = `IOT_HMAC_SECRET__${safeSerialToEnvKey(serial)}`;
-  const hasSpecific = !!process.env[envKey];
-  const hasFallback = !!process.env.IOT_HMAC_SECRET;
-  const secret = process.env[envKey] || process.env.IOT_HMAC_SECRET;
+  const secret = process.env[envKey];
 
   if (!secret) {
     return { ok: false, status: 500, error: "missing_secret", detail: envKey };
@@ -80,27 +78,7 @@ export function authenticateGateway(req: Request, rawBody: string): AuthOk | Aut
     .toLowerCase();
 
   if (!timingSafeEqualHex(sign, expected)) {
-    const debugOn = process.env.DEBUG_HMAC === "1";
-    const usedFallback = !hasSpecific && hasFallback;
-
-    return {
-      ok: false,
-      status: 401,
-      error: "invalid_hmac",
-      ...(debugOn
-        ? {
-            detail: JSON.stringify({
-              serial_received: serial,
-              env_key: envKey,
-              has_specific_secret: hasSpecific,
-              has_fallback_secret: hasFallback,
-              used_fallback: usedFallback,
-              ts: tsStr,
-              rawBodyLen: (rawBody ?? "").length,
-            }),
-          }
-        : {}),
-    };
+    return { ok: false, status: 401, error: "invalid_hmac" };
   }
 
   return { ok: true, serial };

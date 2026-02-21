@@ -26,7 +26,7 @@ function getEnvPath(env) {
 
 /**
  * @param {{ validateFakeGateway?: boolean; gwSerial?: string }} [opts]
- * @returns {{ ENV: string; SUPABASE_URL: string; SUPABASE_SERVICE_ROLE_KEY: string; BASE_URL: string; IOT_HMAC_SECRET: string; [k: string]: string }}
+ * @returns {{ ENV: string; SUPABASE_URL: string; SUPABASE_SERVICE_ROLE_KEY: string; BASE_URL: string; [k: string]: string }}
  */
 export function loadEnv(opts = {}) {
   const raw = process.env.ENV;
@@ -67,8 +67,6 @@ export function loadEnv(opts = {}) {
     process.env.BASE_URL = BASE_URL;
   }
 
-  const IOT_HMAC_SECRET = process.env.IOT_HMAC_SECRET || "";
-
   const SUPABASE_URL_HOST = SUPABASE_URL ? new URL(SUPABASE_URL).host : "-";
 
   const env = {
@@ -76,7 +74,6 @@ export function loadEnv(opts = {}) {
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY,
     BASE_URL,
-    IOT_HMAC_SECRET,
     SUPABASE_URL_HOST,
   };
 
@@ -87,10 +84,10 @@ export function loadEnv(opts = {}) {
   if (opts.validateFakeGateway && opts.gwSerial) {
     const serialNorm = String(opts.gwSerial).toUpperCase().replace(/[^A-Z0-9]+/g, "_");
     const envKey = `IOT_HMAC_SECRET__${serialNorm}`;
-    const secret = process.env[envKey] || process.env.IOT_HMAC_SECRET || "";
+    const secret = process.env[envKey] || "";
     if (!secret) {
       throw new Error(
-        `fake-gateway exige secret para o serial. Defina ${envKey} (ou IOT_HMAC_SECRET) no arquivo de env do ambiente (ex: .env.ci.local para ENV=ci).`
+        `fake-gateway exige secret para o serial. Defina ${envKey} no arquivo de env do ambiente (ex: .env.ci.local para ENV=ci).`
       );
     }
   }
