@@ -271,6 +271,9 @@ async function callFinancial() {
 
 async function main() {
   console.log(`[env] BASE=${BASE}`);
+  const _id = String(IDENTIFICADOR_LOCAL ?? "");
+  const _hex = Buffer.from(_id, "utf8").toString("hex");
+  console.log(`[debug] IDENTIFICADOR_LOCAL len=${_id.length} hex=${_hex}`);
   console.log(`[env] POS_SERIAL=${POS_SERIAL} IDENTIFICADOR_LOCAL=${IDENTIFICADOR_LOCAL} VALOR_CENTAVOS=${VALOR_CENTAVOS} METODO=${METODO}`);
   console.log(`[env] CONDOMINIO_MAQUINAS_ID=${CONDOMINIO_MAQUINAS_ID}`);
   console.log(`[env] GW_SERIAL=${GW_SERIAL} GATEWAY_ID=${GW_ID}`);
