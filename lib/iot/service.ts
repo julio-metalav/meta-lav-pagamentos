@@ -290,18 +290,7 @@ export async function recordEvento(input: EventoInput): Promise<EventoResult> {
   const { ok: hmacOk, debug } = verifyHmac({ serial, ts, receivedHex: sign, rawBody });
 
   if (!hmacOk) {
-    const debugOn = process.env.DEBUG_HMAC === "1";
-    console.log("[IOT_EVENTO] invalid_hmac", {
-      serial: (debug as any).serial,
-      ts: (debug as any).ts,
-      rawBodyLen: (debug as any).rawBodyLen,
-      error: (debug as any).error,
-    });
-
-    return {
-      status: 401,
-      body: { ok: false, error: "invalid_hmac", ...(debugOn ? { debug } : {}) },
-    };
+    return { status: 401, body: { ok: false, error: "invalid_hmac" } };
   }
 
   let payload: any;
