@@ -39,6 +39,10 @@ const GW_ID = process.env.GATEWAY_ID || "";
 
 const serialNorm = GW_SERIAL.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
 const HMAC_SECRET = process.env[`IOT_HMAC_SECRET__${serialNorm}`] || "";
+const gwHex = Buffer.from(String(GW_SERIAL), "utf8").toString("hex");
+console.log(`[debug] GW_SERIAL len=${String(GW_SERIAL).length} hex=${gwHex}`);
+console.log(`[debug] serialNorm=${serialNorm} envKey=IOT_HMAC_SECRET__${serialNorm} hasSecret=${HMAC_SECRET ? "yes" : "no"}`);
+
 
 // Optional: Vercel Protection Bypass (staging)
 const STAGING_VERCEL_BYPASS_TOKEN = process.env.STAGING_VERCEL_BYPASS_TOKEN || "";
