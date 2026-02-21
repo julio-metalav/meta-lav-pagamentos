@@ -16,12 +16,18 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
  */
 export async function POST(req: Request) {
   const vercelEnv = process.env.VERCEL_ENV ?? "";
-  if (vercelEnv === "production") {
-    return NextResponse.json(
-      { ok: false, error: "fake_gateway_confirm_only_allowed_in_preview" },
-      { status: 404 }
-    );
-  }
+const env = (process.env.ENV ?? "").toLowerCase(); // local|ci|prod
+const host = (req.headers.get("host") ?? "").toLowerCase();
+
+const allowInCi =
+  env === "ci" || host.includes("ci.metalav.com.br");
+
+if (vercelEnv === "production" && !allowInCi) {
+  return NextResponse.json(
+    { ok: false, error: "fake_gateway_confirm_only_allowed_in_preview" },
+    { status: 404 }
+  );
+}
 
   const rawBody = await req.text().catch(() => "");
   const auth = authenticateGateway(req, rawBody);
