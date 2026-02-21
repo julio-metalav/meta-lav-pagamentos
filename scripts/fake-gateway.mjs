@@ -279,7 +279,15 @@ async function loop() {
     }
 
     const commands = pollJson?.commands || [];
-    if (!Array.isArray(commands) || commands.length === 0) {
+    if (!Array.isArray(commands) || commands.length === 0) {const headers = {
+  "x-gw-serial": GW_SERIAL, // Aqui o serial é configurado
+  "x-gw-ts": ts,
+  "x-gw-sign": signRequest(ts, rawBody),
+};const headers = {
+  "x-gw-serial": GW_SERIAL, // Aqui o serial é configurado
+  "x-gw-ts": ts,
+  "x-gw-sign": signRequest(ts, rawBody),
+};
       await sleep(POLL_INTERVAL_MS);
       continue;
     }
