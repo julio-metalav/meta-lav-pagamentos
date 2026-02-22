@@ -35,145 +35,51 @@ export async function POST(req: Request) {
     if (payErr) return jsonErrorCompat("Erro ao buscar pagamento.", 500, { code: "db_error", extra: { details: payErr.message } });
     if (!pay) return jsonErrorCompat("payment not found", 404, { code: "payment_not_found" });
 
-    if (String(pay.status || "").toUpperCase() !== "PAGO") {
-      return jsonErrorCompat("payment not confirmed", 409, { code: "payment_not_confirmed" });
-    }
-
-    const { data: machine, error: mErr } = await sb
-      .from("condominio_maquinas")
-      .select("id,gateway_id,identificador_local,tipo,condominio_id,ativa")
-      .eq("tenant_id", tenantId)
-      .eq("id", input.condominio_maquinas_id)
-      .eq("condominio_id", pay.condominio_id)
-      .maybeSingle();
-
-    if (mErr) return jsonErrorCompat("Erro ao consultar máquina.", 500, { code: "db_error", extra: { details: mErr.message } });
-    if (!machine || !machine.ativa) return jsonErrorCompat("machine not found", 404, { code: "machine_not_found" });
-    if (!machine.gateway_id) return jsonErrorCompat("missing gateway", 409, { code: "missing_gateway_id" });
-
     const { data: existingCycle, error: exCycleErr } = await sb
       .from("ciclos")
       .select("id,status,created_at")
       .eq("tenant_id", tenantId)
       .eq("pagamento_id", input.payment_id)
-      .eq("maquina_id", machine.id)
+      .eq("maquina_id", input.condominio_maquinas_id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (exCycleErr) return jsonErrorCompat("Erro ao verificar ciclo existente.", 500, { code: "db_error", extra: { details: exCycleErr.message } });
 
-    // Fail-safe W3: ciclo pendente fora do TTL expira e bloqueia replay/execução tardia.
     if (existingCycle?.status === "AGUARDANDO_LIBERACAO") {
       const createdAtMs = existingCycle.created_at ? new Date(existingCycle.created_at).getTime() : Date.now();
-      const expired = Date.now() >= createdAtMs + PENDING_TTL_SEC * 1000;
-
-      if (expired) {
-        const { error: abortErr } = await sb
-          .from("ciclos")
-          .update({ status: "ABORTADO" })
-          .eq("tenant_id", tenantId)
-          .eq("id", existingCycle.id)
-          .eq("status", "AGUARDANDO_LIBERACAO");
-
-        if (abortErr) {
-          return jsonErrorCompat("Erro ao expirar ciclo pendente.", 500, {
-            code: "db_error",
-            extra: { details: abortErr.message },
-          });
-        }
-
+      if (Date.now() >= createdAtMs + PENDING_TTL_SEC * 1000) {
+        await sb.from("ciclos").update({ status: "ABORTADO" }).eq("tenant_id", tenantId).eq("id", existingCycle.id).eq("status", "AGUARDANDO_LIBERACAO");
         return jsonErrorCompat("cycle expired", 409, { code: "cycle_expired", retry_after_sec: 0 });
       }
     }
 
-    // Cria ciclo, se não houver
-    let cycleId = existingCycle?.id ?? null;
-    if (!cycleId) {
-      const { data: newCycle, error: cErr } = await sb
-        .from("ciclos")
-        .insert({
-          tenant_id: tenantId,
-          pagamento_id: input.payment_id,
-          condominio_id: pay.condominio_id,
-          maquina_id: machine.id,
-          status: "AGUARDANDO_LIBERACAO",
-        })
-        .select("id,status")
-        .single();
-
-      if (cErr || !newCycle) {
-        return jsonErrorCompat("Erro ao criar ciclo.", 500, { code: "cycle_create_failed", extra: { details: cErr?.message } });
-      }
-      cycleId = newCycle.id;
-    }
-
-    // Idempotência final: com ciclo resolvido, reaproveita comando já criado para key+ciclo.
-    const { data: existingCmdByCycle, error: exCmdCycleErr } = await sb
-      .from("iot_commands")
-      .select("id,cmd_id,payload,created_at")
-      .eq("tenant_id", tenantId)
-      .eq("gateway_id", machine.gateway_id)
-      .filter("payload->>execute_idempotency_key", "eq", input.idempotency_key)
-      .filter("payload->>ciclo_id", "eq", String(cycleId))
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (exCmdCycleErr) {
-      return jsonErrorCompat("Erro ao verificar idempotência de comando.", 500, {
-        code: "db_error",
-        extra: { details: exCmdCycleErr.message },
-      });
-    }
-
-    if (existingCmdByCycle) {
-      return NextResponse.json({
-        ok: true,
-        replay: true,
-        correlation_id,
-        cycle_id: cycleId,
-        command_id: existingCmdByCycle.cmd_id,
-        status: "queued",
-      });
-    }
-
-    const cmd_id = crypto.randomUUID();
-    const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-
-    const { error: cmdErr } = await sb.from("iot_commands").insert({
-      tenant_id: tenantId,
-      gateway_id: machine.gateway_id,
-      condominio_maquinas_id: machine.id,
-      pagamento_id: input.payment_id,
-      cmd_id,
-      tipo: "PULSE",
-      payload: {
-        pulses: 1,
-        ciclo_id: cycleId,
-        pagamento_id: input.payment_id,
-        execute_idempotency_key: input.idempotency_key,
-        identificador_local: machine.identificador_local,
-        tipo_maquina: machine.tipo,
-        channel: input.channel,
-        origin: input.origin,
-      },
-      status: "PENDENTE",
-      expires_at,
+    const { data: rpcResult, error: rpcErr } = await sb.rpc("rpc_confirm_and_enqueue", {
+      p_payment_id: input.payment_id,
+      p_tenant_id: tenantId,
+      p_condominio_maquinas_id: input.condominio_maquinas_id,
+      p_idempotency_key: input.idempotency_key,
+      p_channel: input.channel,
+      p_origin: input.origin ?? {},
     });
 
-    if (cmdErr) {
-      return jsonErrorCompat("Erro ao criar comando iot.", 500, {
-        code: "iot_command_create_failed",
-        extra: { details: cmdErr.message, cycle_id: cycleId },
-      });
+    if (rpcErr) {
+      return jsonErrorCompat("Erro ao confirmar e enfileirar.", 500, { code: "db_error", extra: { details: rpcErr.message } });
+    }
+
+    const res = rpcResult as { ok?: boolean; error?: string; payment_id?: string; ciclo_id?: string; command_id?: string; already_processed?: boolean } | null;
+    if (!res || res.ok === false) {
+      const code = res?.error === "payment_not_confirmed" ? "payment_not_confirmed" : res?.error === "machine_not_found" ? "machine_not_found" : "rpc_failed";
+      return jsonErrorCompat(res?.error ?? "rpc_failed", res?.error === "payment_not_confirmed" ? 409 : res?.error === "machine_not_found" ? 404 : 500, { code });
     }
 
     return NextResponse.json({
       ok: true,
+      replay: !!res.already_processed,
       correlation_id,
-      cycle_id: cycleId,
-      command_id: cmd_id,
+      cycle_id: res.ciclo_id,
+      command_id: res.command_id,
       status: "queued",
     });
   } catch (e: unknown) {
