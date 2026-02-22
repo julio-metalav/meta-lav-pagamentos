@@ -242,6 +242,7 @@ async function handleCommand(command) {
       await sleep(jitter());
     }
 
+    // POST /api/iot/evento — shape: type (PULSO_ENVIADO | BUSY_ON | BUSY_OFF), cmd_id, machine_id, ts
     const body = {
       type: event.type,
       cmd_id,
@@ -278,18 +279,10 @@ async function loop() {
     }
 
     const commands = pollJson?.commands || [];
-    if (!Array.isArray(commands) || commands.length === 0) {const headers = {
-  "x-gw-serial": GW_SERIAL, // Aqui o serial é configurado
-  "x-gw-ts": ts,
-  "x-gw-sign": signRequest(ts, rawBody),
-};const headers = {
-  "x-gw-serial": GW_SERIAL, // Aqui o serial é configurado
-  "x-gw-ts": ts,
-  "x-gw-sign": signRequest(ts, rawBody),
-};
-      await sleep(POLL_INTERVAL_MS);
-      continue;
-    }
+      if (!Array.isArray(commands) || commands.length === 0) {
+        await sleep(POLL_INTERVAL_MS);
+        continue;
+      }
 
     for (const command of commands) {
       try {

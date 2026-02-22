@@ -202,7 +202,39 @@ export async function POST(req: Request) {
       }
     }
 
-    // Idempotência (anti retry/duplo clique)
+    // client_request_id (opcional): mesma intenção = mesmo pagamento (reused=true). Backend já suporta; POS pode enviar depois.
+    const clientRequestIdRaw = bodyObj.client_request_id !== undefined && bodyObj.client_request_id !== null
+      ? String(bodyObj.client_request_id).trim()
+      : "";
+    const client_request_id = clientRequestIdRaw.length > 0 ? clientRequestIdRaw : null;
+
+    if (client_request_id) {
+      const { data: existingByClientReq, error: crErr } = await supabase
+        .from("pagamentos")
+        .select("id, status, created_at")
+        .eq("tenant_id", tenantId)
+        .eq("pos_device_id", posDevice.id)
+        .eq("client_request_id", client_request_id)
+        .maybeSingle();
+
+      if (crErr) {
+        return withCommitHeader(jsonErrorCompat("Erro ao verificar client_request_id.", 500, {
+          code: "db_error",
+          extra: { details: crErr.message },
+        }));
+      }
+      if (existingByClientReq) {
+        return withCommitHeader(NextResponse.json({
+          ok: true,
+          reused: true,
+          correlation_id,
+          pagamento_id: existingByClientReq.id,
+          pagamento_status: existingByClientReq.status,
+        }));
+      }
+    }
+
+    // Idempotência por idempotency_key (fallback quando client_request_id não enviado)
     const minuteBucket = Math.floor(Date.now() / 60000);
     const idempotency_key =
       (bodyObj.idempotency_key ? String(bodyObj.idempotency_key).trim() : null) ||
@@ -233,6 +265,7 @@ export async function POST(req: Request) {
     }
 
     // Pagamento (PT-BR) — sem ciclo/comando nesta etapa. status explícito para fake-gateway-confirm e manual/confirm.
+    // Lookup idempotente usa (tenant_id, pos_device_id, client_request_id) — mesma chave do índice UNIQUE.
     const { data: pagamento, error: payErr } = await supabase
       .from("pagamentos")
       .insert({
@@ -240,10 +273,13 @@ export async function POST(req: Request) {
         condominio_id,
         maquina_id: maquina.id,
         origem: "POS",
+        pos_device_id: posDevice.id,
+        pos_serial: headerPosSerial || null,
         metodo,
         gateway_pagamento: "STONE",
         valor_centavos,
         idempotency_key,
+        client_request_id: client_request_id ?? null,
         external_id: null,
         status: "CRIADO",
       })
