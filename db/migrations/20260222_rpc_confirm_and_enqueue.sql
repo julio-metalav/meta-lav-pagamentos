@@ -1,4 +1,4 @@
--- DECISÃO 2: RPC transacional para atomicidade (confirm + ciclo + iot_command).
+<-- DECISÃO 2: RPC transacional para atomicidade (confirm + ciclo + iot_command).
 -- Lock por provider_ref (se existir) ou payment_id. Idempotente.
 
 create or replace function public.rpc_confirm_and_enqueue(
@@ -46,11 +46,16 @@ begin
   end if;
 
   -- Opcional: marcar PAGO dentro da mesma transação
-  if upper(v_pay.status) <> 'PAGO' and p_provider_ref is not null and lower(p_result) = 'approved' then
+  -- NOTE: status é enum (pag_status). Comparar diretamente, sem upper().
+  if v_pay.status <> 'PAGO'::pag_status and p_provider_ref is not null and lower(p_result) = 'approved' then
     update pagamentos
-       set status = 'PAGO', external_id = p_provider_ref, paid_at = v_now, gateway_pagamento = v_gateway_enum
+       set status = 'PAGO'::pag_status,
+           external_id = p_provider_ref,
+           paid_at = v_now,
+           gateway_pagamento = v_gateway_enum
      where id = p_payment_id and tenant_id = p_tenant_id;
-  elsif upper(v_pay.status) <> 'PAGO' then
+
+  elsif v_pay.status <> 'PAGO'::pag_status then
     return json_build_object('ok', false, 'error', 'payment_not_confirmed', 'payment_id', p_payment_id);
   end if;
 
@@ -135,4 +140,4 @@ end;
 $$;
 
 comment on function public.rpc_confirm_and_enqueue(uuid,uuid,uuid,text,text,text,text,text,jsonb) is
-  'Transacional: lock + opcional PAGO + ciclo + iot_command. Idempotente por execute_idempotency_key+ciclo_id.';
+  'Transacional: lock + opcional PAGO + ciclo + iot_command. Idempotente por execute_idempotency_key+ciclo_id.';>
