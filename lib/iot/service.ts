@@ -39,6 +39,58 @@ function bad(message: string, status = 400, extra?: Record<string, unknown>): Po
   return { status, body: { ok: false, error: message, ...(extra ?? {}) } };
 }
 
+const RECONCILE_EXPIRED_LIMIT = 100;
+
+/**
+ * Marca comandos ENVIADO/PENDENTE expirados (expires_at < now) como EXPIRADO
+ * e aborta o ciclo ligado (payload.ciclo_id) se ainda estiver AGUARDANDO_LIBERACAO.
+ * Idempotente; chamado no início do poll para liberar availability e evitar comandos presos.
+ */
+export async function reconcileExpiredCommands(
+  admin: ReturnType<typeof supabaseAdmin>,
+  tenantId: string,
+  nowIso: string
+): Promise<{ expired: number; cyclesAborted: number }> {
+  let expired = 0;
+  let cyclesAborted = 0;
+  const { data: rows, error: selErr } = await admin
+    .from("iot_commands")
+    .select("id, payload")
+    .eq("tenant_id", tenantId)
+    .in("status", ["ENVIADO", "PENDENTE", "pendente", "pending"])
+    .lt("expires_at", nowIso)
+    .limit(RECONCILE_EXPIRED_LIMIT);
+
+  if (selErr || !rows?.length) return { expired: 0, cyclesAborted: 0 };
+
+  for (const row of rows) {
+    const { error: upErr } = await admin
+      .from("iot_commands")
+      .update({ status: "EXPIRADO" })
+      .eq("tenant_id", tenantId)
+      .eq("id", row.id);
+    if (!upErr) expired++;
+
+    const payload = row.payload as Record<string, unknown> | null;
+    const cicloObj = payload?.ciclo as Record<string, unknown> | undefined;
+    const cicloId = (
+      payload?.ciclo_id ?? payload?.cicloId ?? cicloObj?.id ?? cicloObj?.ciclo_id ?? ""
+    ) as string;
+    if (cicloId && typeof cicloId === "string" && cicloId.length > 0) {
+      const { data: aborted } = await admin
+        .from("ciclos")
+        .update({ status: "ABORTADO" })
+        .eq("tenant_id", tenantId)
+        .eq("id", cicloId)
+        .eq("status", "AGUARDANDO_LIBERACAO")
+        .select("id")
+        .maybeSingle();
+      if (aborted) cyclesAborted++;
+    }
+  }
+  return { expired, cyclesAborted };
+}
+
 export async function pollCommands(input: PollInput): Promise<PollOk | PollErr> {
   try {
     const tenantId = getDefaultTenantId();
@@ -91,7 +143,10 @@ export async function pollCommands(input: PollInput): Promise<PollOk | PollErr> 
       } catch {}
     }
 
-    // Buscar comandos pendentes
+    // Reconciliação: ENVIADO/PENDENTE expirados → EXPIRADO e ciclo → ABORTADO (libera availability)
+    await reconcileExpiredCommands(admin, tenantId, nowIso);
+
+    // Buscar comandos pendentes (não expirados)
     const { data: cmds, error: cmdErr } = await admin
       .from("iot_commands")
       .select("id, cmd_id, tipo, payload, status, expires_at, created_at")
