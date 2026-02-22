@@ -282,7 +282,7 @@ export async function GET(req: Request) {
 
       const cycle = pickBestCycleByStatus((cycleRows ?? []) as CycleRow[]);
 
-      if (String(cycle?.status).toUpperCase() === "FINALIZADO") {
+      if (String(cycle?.status || "").toUpperCase() === "FINALIZADO") {
         const availability = availabilityFromCycle(cycle);
         return buildResponse({
           payment: null,
