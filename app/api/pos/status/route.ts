@@ -281,8 +281,19 @@ export async function GET(req: Request) {
       }
 
       const cycle = pickBestCycleByStatus((cycleRows ?? []) as CycleRow[]);
-      let command: CommandRow | null = null;
 
+      if (String(cycle?.status).toUpperCase() === "FINALIZADO") {
+        const availability = availabilityFromCycle(cycle);
+        return buildResponse({
+          payment: null,
+          cycle: cycle as CycleRow,
+          command: null,
+          machine,
+          availability,
+        });
+      }
+
+      let command: CommandRow | null = null;
       if (cycle?.id) {
         const { data: cmdData } = await sb
           .from("iot_commands")
