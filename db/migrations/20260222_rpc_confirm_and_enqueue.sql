@@ -1,4 +1,4 @@
-<-- DECISÃO 2: RPC transacional para atomicidade (confirm + ciclo + iot_command).
+-- DECISÃO 2: RPC transacional para atomicidade (confirm + ciclo + iot_command).
 -- Lock por provider_ref (se existir) ou payment_id. Idempotente.
 
 create or replace function public.rpc_confirm_and_enqueue(
@@ -140,4 +140,4 @@ end;
 $$;
 
 comment on function public.rpc_confirm_and_enqueue(uuid,uuid,uuid,text,text,text,text,text,jsonb) is
-  'Transacional: lock + opcional PAGO + ciclo + iot_command. Idempotente por execute_idempotency_key+ciclo_id.';>
+  'Transacional: lock + opcional PAGO + ciclo + iot_command. Idempotente por execute_idempotency_key+ciclo_id.';
