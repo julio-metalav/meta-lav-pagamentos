@@ -198,11 +198,14 @@ tables:
       tenant_id: { type: "uuid", required: true }
       condominio_id: { type: "uuid", required: true }
       maquina_id: { type: "uuid", required: false }
+      pos_device_id: { type: "uuid", required: false }
+      pos_serial: { type: "text", required: false }  # Serial POS ou identificador app; índice idempotência quando pos_device_id null.
 
       # DB real (vimos na prática via constraint):
       origem: { type: "pag_origem", required: true }
       gateway_pagamento: { type: "pag_gateway", required: true }
       idempotency_key: { type: "text", required: true }
+      client_request_id: { type: "text", required: false }
 
       valor_centavos: { type: "int", required: true }
       external_id: { type: "text", required: false }
