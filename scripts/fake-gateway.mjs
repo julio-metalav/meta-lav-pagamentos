@@ -14,6 +14,12 @@ function parseFixtureArg() {
   return process.argv[i + 1] || process.env.ENV || null;
 }
 
+function parseArg(name) {
+  const i = process.argv.indexOf(name);
+  if (i === -1) return null;
+  return process.argv[i + 1] || null;
+}
+
 function loadFixtures() {
   const p = path.join(ROOT, "scripts", "fixtures.json");
   if (!fs.existsSync(p)) return {};
@@ -28,14 +34,17 @@ const fixtureName = parseFixtureArg() || process.env.ENV;
 const fixtures = loadFixtures();
 const fixture = fixtureName && fixtures[fixtureName] ? fixtures[fixtureName] : {};
 
+const serialFromArgv = parseArg("--serial");
+const gwSerialForEnv = serialFromArgv || process.env.GW_SERIAL || fixture.gw_serial || "GW-FAKE-001";
+
 const env = loadEnv({
   validateFakeGateway: true,
-  gwSerial: process.env.GW_SERIAL || fixture.gw_serial || "GW-FAKE-001",
+  gwSerial: gwSerialForEnv,
 });
 
-const BASE_URL = process.env.BASE_URL || env.BASE_URL || "https://ci.metalav.com.br";
-const GW_SERIAL = process.env.GW_SERIAL || fixture.gw_serial || "GW-FAKE-001";
-const serialNorm = GW_SERIAL.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+const BASE_URL = parseArg("--base-url") || process.env.BASE_URL || env.BASE_URL || "https://ci.metalav.com.br";
+const GW_SERIAL = serialFromArgv || process.env.GW_SERIAL || fixture.gw_serial || "GW-FAKE-001";
+const serialNorm = GW_SERIAL.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_");
 const IOT_HMAC_SECRET = process.env[`IOT_HMAC_SECRET__${serialNorm}`] || "";
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 2000);
 const BUSY_ON_MS = Number(process.env.BUSY_ON_MS || 7000);
