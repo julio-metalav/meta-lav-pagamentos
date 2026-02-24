@@ -40,30 +40,36 @@ type MachineRow = {
 };
 
 function parseUiState(payment: PaymentRow | null, cycle?: CycleRow | null, command?: CommandRow | null): string {
+  const cycleStatus = String(cycle?.status || "").toUpperCase();
   if (!payment) {
-    return cycle ? (String(cycle.status || "").toUpperCase() === "FINALIZADO" ? "LIVRE" : "EM_USO") : "LIVRE";
+    if (!cycle) return "LIVRE";
+    if (cycleStatus === "FINALIZADO" || cycleStatus === "ABORTADO") return "LIVRE";
+    return "EM_USO";
   }
   const paymentStatus = String(payment.status || "").toUpperCase();
-  const cycleStatus = String(cycle?.status || "").toUpperCase();
 
   if (!paymentStatus) return "ERRO";
   if (paymentStatus === "CRIADO") return "AGUARDANDO_PAGAMENTO";
-  if (paymentStatus !== "PAGO") {
-    if (paymentStatus === "EXPIRADO") return "EXPIRADO";
-    return "ERRO";
-  }
+  if (paymentStatus === "ESTORNADO") return "ESTORNADO";
+  if (paymentStatus === "EXPIRADO") return "EXPIRADO";
+  if (paymentStatus !== "PAGO") return "ERRO";
   if (!cycle) return "PAGO";
+  if (cycleStatus === "ABORTADO") {
+    if (paymentStatus === "PAGO") return "ESTORNANDO";
+    if (paymentStatus === "ESTORNADO") return "ESTORNADO";
+    return "LIVRE";
+  }
   if (cycleStatus === "AGUARDANDO_LIBERACAO" || cycleStatus === "LIBERADO") return "LIBERANDO";
   if (cycleStatus === "EM_USO") return "EM_USO";
   if (cycleStatus === "FINALIZADO") return "FINALIZADO";
   return "ERRO";
 }
 
-/** availability: LIVRE se sem ciclo ou FINALIZADO; EM_USO caso contrário; fail-safe EM_USO. */
+/** availability: LIVRE se sem ciclo, FINALIZADO ou ABORTADO; EM_USO caso contrário; fail-safe EM_USO. */
 function availabilityFromCycle(cycle: CycleRow | null): "LIVRE" | "EM_USO" {
   if (!cycle) return "LIVRE";
   const u = String(cycle.status || "").toUpperCase();
-  if (u === "FINALIZADO") return "LIVRE";
+  if (u === "FINALIZADO" || u === "ABORTADO") return "LIVRE";
   if (u === "EM_USO" || u === "LIBERADO" || u === "AGUARDANDO_LIBERACAO") return "EM_USO";
   return "EM_USO"; // fail-safe
 }
