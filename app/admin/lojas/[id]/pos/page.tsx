@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { getServerBaseUrl } from "@/lib/http/getServerBaseUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +18,10 @@ async function createPos(condominioId: string, formData: FormData) {
   const serial = String(formData.get("serial") || "").trim();
   if (!serial) throw new Error("serial é obrigatório.");
 
-  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
-  const res = await fetch(`${baseUrl}/api/admin/pos-devices`, {
+  const res = await fetch("/api/admin/pos-devices", {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -42,7 +40,6 @@ async function createPos(condominioId: string, formData: FormData) {
 export default async function AdminLojaPosPage({ params }: Props) {
   const { id } = await params;
 
-  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
@@ -51,10 +48,7 @@ export default async function AdminLojaPosPage({ params }: Props) {
   let apiError: string | null = null;
 
   try {
-    const u = new URL(`${baseUrl}/api/admin/pos-devices`);
-    u.searchParams.set("condominio_id", id);
-
-    const res = await fetch(u.toString(), {
+    const res = await fetch(`/api/admin/pos-devices?condominio_id=${encodeURIComponent(id)}`, {
       headers: { cookie: cookieHeader },
       cache: "no-store",
     });

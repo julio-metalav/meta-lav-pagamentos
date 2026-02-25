@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getServerBaseUrl } from "@/lib/http/getServerBaseUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +19,10 @@ async function createLoja(formData: FormData) {
     throw new Error("Dados inválidos. Verifique nome, cidade e UF.");
   }
 
-  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
-  const res = await fetch(`${baseUrl}/api/admin/condominios`, {
+  const res = await fetch("/api/admin/condominios", {
     method: "POST",
     headers: {
       "content-type": "application/json",

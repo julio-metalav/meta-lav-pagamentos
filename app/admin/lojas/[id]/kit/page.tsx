@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getServerBaseUrl } from "@/lib/http/getServerBaseUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +17,10 @@ async function reconcileKit(condominioId: string, formData: FormData) {
   const reason = String(formData.get("reason") || "").trim() || undefined;
   if (!pos_device_id || !gateway_id) throw new Error("Selecione POS e Gateway.");
 
-  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
-  const res = await fetch(`${baseUrl}/api/admin/kits/reconcile`, {
+  const res = await fetch("/api/admin/kits/reconcile", {
     method: "POST",
     headers: { "content-type": "application/json", cookie: cookieHeader },
     body: JSON.stringify({ condominio_id: condominioId, pos_device_id, gateway_id, reason }),
@@ -46,11 +44,10 @@ async function transferKit(condominioId: string, formData: FormData) {
   if (!pos_device_id || !gateway_id) throw new Error("Selecione POS e Gateway.");
   if (!to_condominio_id) throw new Error("Selecione a loja de destino.");
 
-  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
-  const res = await fetch(`${baseUrl}/api/admin/kits/transfer`, {
+  const res = await fetch("/api/admin/kits/transfer", {
     method: "POST",
     headers: { "content-type": "application/json", cookie: cookieHeader },
     body: JSON.stringify({
@@ -74,7 +71,6 @@ async function transferKit(condominioId: string, formData: FormData) {
 export default async function AdminLojaKitPage({ params }: Props) {
   const { id } = await params;
 
-  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
@@ -86,9 +82,9 @@ export default async function AdminLojaKitPage({ params }: Props) {
 
   try {
     const [posRes, gwRes, condRes] = await Promise.all([
-      fetch(`${baseUrl}/api/admin/pos-devices?condominio_id=${id}`, { headers: { cookie: cookieHeader }, cache: "no-store" }),
-      fetch(`${baseUrl}/api/admin/gateways?condominio_id=${id}&limit=100`, { headers: { cookie: cookieHeader }, cache: "no-store" }),
-      fetch(`${baseUrl}/api/admin/condominios?limit=200`, { headers: { cookie: cookieHeader }, cache: "no-store" }),
+      fetch(`/api/admin/pos-devices?condominio_id=${encodeURIComponent(id)}`, { headers: { cookie: cookieHeader }, cache: "no-store" }),
+      fetch(`/api/admin/gateways?condominio_id=${encodeURIComponent(id)}&limit=100`, { headers: { cookie: cookieHeader }, cache: "no-store" }),
+      fetch(`/api/admin/condominios?limit=200`, { headers: { cookie: cookieHeader }, cache: "no-store" }),
     ]);
 
     apiStatus = posRes.status;
