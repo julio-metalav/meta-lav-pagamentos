@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { getServerBaseUrl } from "@/lib/http/getServerBaseUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -12,24 +13,13 @@ type PosDevice = {
   updated_at?: string | null;
 };
 
-function getBaseUrl() {
-  const env =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    process.env.BASE_URL ||
-    process.env.VERCEL_URL ||
-    "";
-  if (!env) return "http://localhost:3000";
-  if (env.startsWith("http")) return env;
-  return `https://${env}`;
-}
-
 async function createPos(condominioId: string, formData: FormData) {
   "use server";
 
   const serial = String(formData.get("serial") || "").trim();
   if (!serial) throw new Error("serial é obrigatório.");
 
-  const baseUrl = getBaseUrl();
+  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
@@ -52,7 +42,7 @@ async function createPos(condominioId: string, formData: FormData) {
 export default async function AdminLojaPosPage({ params }: Props) {
   const { id } = await params;
 
-  const baseUrl = getBaseUrl();
+  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getServerBaseUrl } from "@/lib/http/getServerBaseUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -10,17 +11,6 @@ type PosDevice = { id: string; serial: string; condominio_id: string };
 type Gateway = { id: string; serial: string; condominio_id: string };
 type Condominio = { id: string; nome: string };
 
-function getBaseUrl() {
-  const env =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    process.env.BASE_URL ||
-    process.env.VERCEL_URL ||
-    "";
-  if (!env) return "http://localhost:3000";
-  if (env.startsWith("http")) return env;
-  return `https://${env}`;
-}
-
 async function reconcileKit(condominioId: string, formData: FormData) {
   "use server";
   const pos_device_id = String(formData.get("pos_device_id") || "").trim();
@@ -28,7 +18,7 @@ async function reconcileKit(condominioId: string, formData: FormData) {
   const reason = String(formData.get("reason") || "").trim() || undefined;
   if (!pos_device_id || !gateway_id) throw new Error("Selecione POS e Gateway.");
 
-  const baseUrl = getBaseUrl();
+  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
@@ -56,7 +46,7 @@ async function transferKit(condominioId: string, formData: FormData) {
   if (!pos_device_id || !gateway_id) throw new Error("Selecione POS e Gateway.");
   if (!to_condominio_id) throw new Error("Selecione a loja de destino.");
 
-  const baseUrl = getBaseUrl();
+  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
@@ -84,7 +74,7 @@ async function transferKit(condominioId: string, formData: FormData) {
 export default async function AdminLojaKitPage({ params }: Props) {
   const { id } = await params;
 
-  const baseUrl = getBaseUrl();
+  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 

@@ -1,19 +1,9 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getServerBaseUrl } from "@/lib/http/getServerBaseUrl";
 
 export const dynamic = "force-dynamic";
-
-function getBaseUrl() {
-  const env =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    process.env.BASE_URL ||
-    process.env.VERCEL_URL ||
-    "";
-  if (!env) return "http://localhost:3000";
-  if (env.startsWith("http")) return env;
-  return `https://${env}`;
-}
 
 async function createLoja(formData: FormData) {
   "use server";
@@ -30,7 +20,7 @@ async function createLoja(formData: FormData) {
     throw new Error("Dados inválidos. Verifique nome, cidade e UF.");
   }
 
-  const baseUrl = getBaseUrl();
+  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
@@ -50,9 +40,13 @@ async function createLoja(formData: FormData) {
     cache: "no-store",
   });
 
+  const contentType = res.headers.get("content-type") ?? "";
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(txt || `Erro HTTP ${res.status}`);
+    if (contentType.includes("text/html")) {
+      throw new Error("Upstream returned HTML; baseUrl likely wrong. " + (txt ? txt.slice(0, 200) : `HTTP ${res.status}`));
+    }
+    throw new Error((txt && txt.length > 0 ? txt.slice(0, 200) : `Erro HTTP ${res.status}`));
   }
 
   const json = await res.json();

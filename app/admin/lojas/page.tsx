@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { getServerBaseUrl } from "@/lib/http/getServerBaseUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -12,18 +13,6 @@ type Loja = {
   codigo_condominio?: string | null;
   updated_at?: string | null;
 };
-
-function getBaseUrl() {
-  // Server-side fetch precisa de URL absoluta
-  const env =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    process.env.BASE_URL ||
-    process.env.VERCEL_URL ||
-    "";
-  if (!env) return "http://localhost:3000";
-  if (env.startsWith("http")) return env;
-  return `https://${env}`;
-}
 
 export default async function AdminLojasPage({
   searchParams,
@@ -54,7 +43,7 @@ export default async function AdminLojasPage({
   qs.set("limit", String(limit));
   if (search) qs.set("search", search);
 
-  const baseUrl = getBaseUrl();
+  const baseUrl = await getServerBaseUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
