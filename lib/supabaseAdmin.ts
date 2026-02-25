@@ -1,1 +1,1 @@
-export { supabaseAdmin } from "@/lib/db/supabaseAdmin";
+export { supabaseAdmin } from "./db/supabaseAdmin";

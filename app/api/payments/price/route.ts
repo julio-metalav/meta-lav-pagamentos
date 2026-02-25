@@ -7,29 +7,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { parsePriceInput } from "@/lib/payments/contracts";
 import { getTenantIdFromRequest } from "@/lib/tenant";
-
-function pickAmountCents(row: Record<string, any>): number | null {
-  const centsCandidates = ["valor_centavos", "preco_centavos", "amount_centavos"];
-  for (const k of centsCandidates) {
-    const v = row?.[k];
-    if (typeof v === "number" && Number.isFinite(v) && v > 0) return Math.trunc(v);
-  }
-
-  const brlCandidates = ["valor", "preco", "amount"];
-  for (const k of brlCandidates) {
-    const v = row?.[k];
-    if (typeof v === "number" && Number.isFinite(v) && v > 0) return Math.round(v * 100);
-  }
-
-  return null;
-}
-
-function rowMatchesService(row: Record<string, any>, serviceType: "lavadora" | "secadora") {
-  const candidates = [row?.tipo, row?.tipo_maquina, row?.service_type, row?.categoria];
-  const normalized = candidates.map((x) => String(x ?? "").trim().toLowerCase()).filter(Boolean);
-  if (normalized.length === 0) return true; // fallback permissivo
-  return normalized.includes(serviceType);
-}
+import { resolvePriceOrThrow, PriceResolutionError } from "@/lib/payments/pricing/resolvePrice";
 
 export async function POST(req: Request) {
   try {
@@ -39,44 +17,17 @@ export async function POST(req: Request) {
 
     const input = parsed.data;
     const tenantId = getTenantIdFromRequest(req);
-    const sb = supabaseAdmin() as any;
+    const sb = supabaseAdmin();
 
-    const { data: machine, error: mErr } = await sb
-      .from("condominio_maquinas")
-      .select("id, condominio_id, tipo, ativa")
-      .eq("tenant_id", tenantId)
-      .eq("id", input.condominio_maquinas_id)
-      .eq("condominio_id", input.condominio_id)
-      .maybeSingle();
+    const resolved = await resolvePriceOrThrow({
+      tenantId,
+      condominioId: input.condominio_id,
+      condominioMaquinasId: input.condominio_maquinas_id,
+      serviceType: input.service_type,
+      supabaseClient: sb,
+    });
 
-    if (mErr) return jsonErrorCompat("Erro ao consultar máquina.", 500, { code: "db_error", extra: { details: mErr.message } });
-    if (!machine || !machine.ativa) return jsonErrorCompat("machine not found", 404, { code: "machine_not_found" });
-
-    const nowIso = new Date().toISOString();
-
-    const { data: rows, error: pErr } = await sb
-      .from("precos_ciclo")
-      .select("*")
-      .eq("maquina_id", machine.id)
-      .or(`vigente_ate.is.null,vigente_ate.gte.${nowIso}`)
-      .lte("vigente_desde", nowIso)
-      .limit(100);
-
-    if (pErr) return jsonErrorCompat("Erro ao consultar precos_ciclo.", 500, { code: "db_error", extra: { details: pErr.message } });
-
-    const list = (rows ?? []) as Record<string, any>[];
-    const filtered = list.filter((r) => rowMatchesService(r, input.service_type));
-
-    const chosen = filtered.find((r) => pickAmountCents(r) !== null) ?? list.find((r) => pickAmountCents(r) !== null);
-    if (!chosen) {
-      return jsonErrorCompat("price not found", 404, { code: "price_not_found" });
-    }
-
-    const amountCentavos = pickAmountCents(chosen);
-    if (!amountCentavos) {
-      return jsonErrorCompat("invalid price", 500, { code: "invalid_price" });
-    }
-
+    const amountCentavos = resolved.amountCentavos;
     const now = Date.now();
     const validUntil = new Date(now + 5 * 60 * 1000).toISOString();
     const quoteId = crypto.randomUUID();
@@ -90,7 +41,7 @@ export async function POST(req: Request) {
           condominio_maquinas_id: input.condominio_maquinas_id,
           service_type: input.service_type,
           amountCentavos,
-          rule_id: chosen.id ?? null,
+          rule_id: resolved.ruleId,
           validUntil,
         })
       )
@@ -103,15 +54,23 @@ export async function POST(req: Request) {
         amount: amountCentavos / 100,
         currency: "BRL",
         source: "precos_ciclo",
-        rule_id: chosen.id ? `preco:${chosen.id}` : "preco:unknown",
+        rule_id: resolved.ruleId ? `preco:${resolved.ruleId}` : "preco:unknown",
         valid_until: validUntil,
         pricing_hash,
       },
     });
-  } catch (e: any) {
+  } catch (e) {
+    if (e instanceof PriceResolutionError) {
+      const status = e.code === "machine_not_found" || e.code === "price_not_found" ? 404 : 500;
+      return jsonErrorCompat(e.message, status, {
+        code: e.code,
+        extra: e.details ? { details: e.details } : undefined,
+      });
+    }
+    const msg = e instanceof Error ? e.message : String(e);
     return jsonErrorCompat("Erro inesperado no price.", 500, {
       code: "internal_error",
-      extra: { details: e?.message ?? String(e) },
+      extra: { details: msg },
     });
   }
 }

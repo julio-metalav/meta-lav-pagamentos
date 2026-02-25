@@ -3,9 +3,10 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
-import { parseAuthorizeInput } from "@/lib/payments/contracts";
 import { isPosCanaryAllowed } from "@/lib/payments/rollout";
 import { getTenantIdFromRequest } from "@/lib/tenant";
+import { resolvePriceOrThrow, PriceResolutionError } from "@/lib/payments/pricing/resolvePrice";
+import type { ServiceType } from "@/lib/payments/pricing/resolvePrice";
 
 const NEXUS_COMMIT = process.env.VERCEL_GIT_COMMIT_SHA ?? "unknown";
 
@@ -25,7 +26,7 @@ function withCommitHeader(res: NextResponse): NextResponse {
 export async function POST(req: Request) {
   try {
     const tenantId = getTenantIdFromRequest(req);
-    const supabase = supabaseAdmin() as any;
+    const supabase = supabaseAdmin();
 
     let body: unknown = {};
     try {
@@ -74,7 +75,6 @@ export async function POST(req: Request) {
         ? bodyObj.condominio_id
         : posDevice.condominio_id ?? ""
     ).trim();
-    const valor_centavos_raw = bodyObj.valor_centavos;
     const metodo_raw = String(bodyObj.metodo || "").trim().toUpperCase();
 
     if (!identificador_local) {
@@ -83,16 +83,8 @@ export async function POST(req: Request) {
     if (!condominio_id) {
       return withCommitHeader(jsonErrorCompat("condominio_id é obrigatório (ou cadastre o POS em pos_devices com condominio_id).", 400, { code: "missing_condominio_id" }));
     }
-    if (!valor_centavos_raw || (typeof valor_centavos_raw !== "number" && typeof valor_centavos_raw !== "string")) {
-      return withCommitHeader(jsonErrorCompat("valor_centavos é obrigatório.", 400, { code: "missing_valor_centavos" }));
-    }
     if (!metodo_raw || (metodo_raw !== "PIX" && metodo_raw !== "CARTAO")) {
       return withCommitHeader(jsonErrorCompat("metodo é obrigatório (PIX | CARTAO).", 400, { code: "missing_metodo" }));
-    }
-
-    const valor_centavos = typeof valor_centavos_raw === "number" ? Math.trunc(valor_centavos_raw) : parseInt(String(valor_centavos_raw), 10);
-    if (!Number.isFinite(valor_centavos) || valor_centavos <= 0) {
-      return withCommitHeader(jsonErrorCompat("valor_centavos inválido.", 400, { code: "invalid_valor_centavos" }));
     }
     const metodo = metodo_raw as "PIX" | "CARTAO";
 
@@ -143,10 +135,10 @@ export async function POST(req: Request) {
       }));
     }
 
-    // c) Buscar máquina com identificador_local, condominio_id, ativa = true
+    // c) Buscar máquina com identificador_local, condominio_id, ativa = true (inclui tipo para resolver preço)
     const { data: maquina, error: maqErr } = await supabase
       .from("condominio_maquinas")
-      .select("id, condominio_id, gateway_id, ativa, pos_device_id")
+      .select("id, condominio_id, gateway_id, ativa, pos_device_id, tipo")
       .eq("tenant_id", tenantId)
       .eq("condominio_id", condominio_id)
       .eq("identificador_local", identificador_local)
@@ -187,6 +179,30 @@ export async function POST(req: Request) {
       return withCommitHeader(jsonErrorCompat("Máquina sem gateway_id vinculado.", 409, { code: "missing_gateway_id" }));
     }
 
+    // e) Resolver preço no backend (soberano). Ignora valor_centavos do body se vier.
+    const serviceType: ServiceType =
+      String(maquina.tipo ?? "").trim().toLowerCase() === "secadora" ? "secadora" : "lavadora";
+    let valor_centavos: number;
+    try {
+      const resolved = await resolvePriceOrThrow({
+        tenantId,
+        condominioId: condominio_id,
+        condominioMaquinasId: maquina.id,
+        serviceType,
+        supabaseClient: supabase,
+      });
+      valor_centavos = resolved.amountCentavos;
+    } catch (e) {
+      if (e instanceof PriceResolutionError) {
+        const status = e.code === "machine_not_found" || e.code === "price_not_found" ? 404 : 500;
+        return withCommitHeader(jsonErrorCompat(e.message, status, {
+          code: e.code,
+          extra: e.details ? { details: e.details } : undefined,
+        }));
+      }
+      throw e;
+    }
+
     // Parse quote se existir (mantém compatibilidade)
     const quote = bodyObj.quote && typeof bodyObj.quote === "object" ? (bodyObj.quote as Record<string, unknown>) : null;
     if (quote) {
@@ -211,7 +227,7 @@ export async function POST(req: Request) {
     if (client_request_id) {
       const { data: existingByClientReq, error: crErr } = await supabase
         .from("pagamentos")
-        .select("id, status, created_at")
+        .select("id, status, created_at, valor_centavos")
         .eq("tenant_id", tenantId)
         .eq("pos_device_id", posDevice.id)
         .eq("client_request_id", client_request_id)
@@ -230,19 +246,20 @@ export async function POST(req: Request) {
           correlation_id,
           pagamento_id: existingByClientReq.id,
           pagamento_status: existingByClientReq.status,
+          valor_centavos: existingByClientReq.valor_centavos,
         }));
       }
     }
 
-    // Idempotência por idempotency_key (fallback quando client_request_id não enviado)
+    // Idempotência por idempotency_key (sem valor_centavos — preço soberano no backend)
     const minuteBucket = Math.floor(Date.now() / 60000);
     const idempotency_key =
       (bodyObj.idempotency_key ? String(bodyObj.idempotency_key).trim() : null) ||
-      `pos:${headerPosSerial}:${identificador_local}:${valor_centavos}:${metodo}:${minuteBucket}`;
+      `pos:${headerPosSerial}:${identificador_local}:${metodo}:${minuteBucket}`;
 
     const { data: existingPay, error: existErr } = await supabase
       .from("pagamentos")
-      .select("id, status, created_at")
+      .select("id, status, created_at, valor_centavos")
       .eq("tenant_id", tenantId)
       .eq("idempotency_key", idempotency_key)
       .maybeSingle();
@@ -261,6 +278,7 @@ export async function POST(req: Request) {
         correlation_id,
         pagamento_id: existingPay.id,
         pagamento_status: existingPay.status,
+        valor_centavos: existingPay.valor_centavos,
       }));
     }
 
@@ -299,6 +317,7 @@ export async function POST(req: Request) {
       correlation_id,
       pagamento_id: pagamento.id,
       pagamento_status: pagamento.status,
+      valor_centavos,
     }));
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
