@@ -68,8 +68,8 @@ export async function middleware(req: NextRequest) {
 
   const secret = process.env.ADMIN_SESSION_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === "production") return new NextResponse("Admin auth not configured", { status: 500 });
-    return NextResponse.next();
+    if (process.env.NODE_ENV === "development") return NextResponse.next();
+    return new NextResponse("Admin auth not configured", { status: 500 });
   }
 
   const token = req.cookies.get(COOKIE_NAME)?.value || "";
