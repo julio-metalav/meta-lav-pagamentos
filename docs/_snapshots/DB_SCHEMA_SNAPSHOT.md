@@ -7,7 +7,7 @@
 - Fonte: rpc
 - Ambiente(s): https://ci.metalav.com.br, https://api.metalav.com.br
 
-Tabelas monitoradas: ciclos, condominio_maquinas, eventos_iot, gateways, iot_commands, pagamentos, pos_devices, precos_ciclo
+Tabelas monitoradas: ciclos, condominio_maquinas, eventos_iot, gateways, iot_commands, pagamentos, pos_devices, precos_ciclo, kit_transfers, kit_resets
 
 ---
 
@@ -144,6 +144,35 @@ Tabelas monitoradas: ciclos, condominio_maquinas, eventos_iot, gateways, iot_com
 | `vigente_desde` | timestamptz | ❌ | `now()` | - |
 | `vigente_ate` | timestamptz | ✅ | - | - |
 | `created_at` | timestamptz | ❌ | `now()` | - |
+
+---
+
+## kit_transfers (2026-02-25)
+| Coluna | Tipo Postgres | Nullable | Default | Enum |
+|---|---|---|---|---|
+| `id` | uuid | ❌ | `gen_random_uuid()` | - |
+| `tenant_id` | uuid | ❌ | - | - |
+| `created_at` | timestamptz | ❌ | `now()` | - |
+| `admin_subject` | text | ✅ | - | - |
+| `from_condominio_id` | uuid | ❌ | - | - |
+| `to_condominio_id` | uuid | ❌ | - | - |
+| `pos_device_id` | uuid | ❌ | - | - |
+| `gateway_id` | uuid | ❌ | - | - |
+| `reason` | text | ✅ | - | - |
+| `metadata` | jsonb | ✅ | - | - |
+
+## kit_resets (2026-02-25)
+| Coluna | Tipo Postgres | Nullable | Default | Enum |
+|---|---|---|---|---|
+| `id` | uuid | ❌ | `gen_random_uuid()` | - |
+| `tenant_id` | uuid | ❌ | - | - |
+| `created_at` | timestamptz | ❌ | `now()` | - |
+| `admin_subject` | text | ✅ | - | - |
+| `condominio_id` | uuid | ❌ | - | - |
+| `pos_device_id` | uuid | ❌ | - | - |
+| `gateway_id` | uuid | ❌ | - | - |
+| `reason` | text | ✅ | - | - |
+| `metadata` | jsonb | ✅ | - | - |
 
 ---
 

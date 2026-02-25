@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { jsonErrorCompat } from "@/lib/api/errors";
 import { getTenantIdFromRequest } from "@/lib/tenant";
+import { requireAdminSession, requirePermission } from "@/lib/admin/server";
 
 function parseQuery(url: string) {
   const u = new URL(url);
@@ -18,6 +19,11 @@ function parseQuery(url: string) {
 export async function GET(req: Request) {
   try {
     const tenantId = getTenantIdFromRequest(req);
+    const sess = await requireAdminSession();
+    if (!sess.ok) return jsonErrorCompat("Unauthorized", 401, { code: "unauthorized" });
+    const hasPerm = await requirePermission(sess.user.id, "admin.gateways.read");
+    if (!hasPerm) return jsonErrorCompat("Forbidden", 403, { code: "forbidden" });
+
     const { search, condominio_id, page, limit } = parseQuery(req.url);
     const from = (page - 1) * limit;
     const to = from + limit - 1;
@@ -56,6 +62,11 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantId = getTenantIdFromRequest(req);
+    const sess = await requireAdminSession();
+    if (!sess.ok) return jsonErrorCompat("Unauthorized", 401, { code: "unauthorized" });
+    const hasPerm = await requirePermission(sess.user.id, "admin.gateways.write");
+    if (!hasPerm) return jsonErrorCompat("Forbidden", 403, { code: "forbidden" });
+
     const body = await req.json().catch(() => ({}));
     const serial = String(body?.serial || "").trim();
     const condominio_id = String(body?.condominio_id || "").trim();

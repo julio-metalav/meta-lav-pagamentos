@@ -262,6 +262,41 @@ tables:
       ativo: { type: "bool", required: false }
       created_at: { type: "timestamptz", required: false }
 
+  kit_transfers:
+    canonical: true
+    runtime: true
+    table: "kit_transfers"
+    purpose: "Log de transferência de kit (POS+Gateway) entre condomínios"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      tenant_id: { type: "uuid", required: true }
+      created_at: { type: "timestamptz", required: true }
+      admin_subject: { type: "text", required: false }
+      from_condominio_id: { type: "uuid", required: true }
+      to_condominio_id: { type: "uuid", required: true }
+      pos_device_id: { type: "uuid", required: true }
+      gateway_id: { type: "uuid", required: true }
+      reason: { type: "text", required: false }
+      metadata: { type: "jsonb", required: false }
+
+  kit_resets:
+    canonical: true
+    runtime: true
+    table: "kit_resets"
+    purpose: "Log de reconcile/reset de pendências do kit (TTL vencido)"
+    primary_key: ["id"]
+    columns:
+      id: { type: "uuid", required: true }
+      tenant_id: { type: "uuid", required: true }
+      created_at: { type: "timestamptz", required: true }
+      admin_subject: { type: "text", required: false }
+      condominio_id: { type: "uuid", required: true }
+      pos_device_id: { type: "uuid", required: true }
+      gateway_id: { type: "uuid", required: true }
+      reason: { type: "text", required: false }
+      metadata: { type: "jsonb", required: false }
+
   # ============================
   # ADMIN / ALERTAS
   # ============================
