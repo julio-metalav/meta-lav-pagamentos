@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getServerBaseUrl } from "@/lib/http/getServerBaseUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +22,9 @@ async function createLoja(formData: FormData) {
 
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
+  const baseUrl = await getServerBaseUrl();
 
-  const res = await fetch("/api/admin/condominios", {
+  const res = await fetch(`${baseUrl}/api/admin/condominios`, {
     method: "POST",
     headers: {
       "content-type": "application/json",

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { getServerBaseUrl } from "@/lib/http/getServerBaseUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ export default async function AdminLojasPage({
 
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
+  const baseUrl = await getServerBaseUrl();
 
   let items: Loja[] = [];
   let total = 0;
@@ -52,7 +54,7 @@ export default async function AdminLojasPage({
   let apiError: string | null = null;
 
   try {
-    const res = await fetch(`/api/admin/condominios?${qs.toString()}`, {
+    const res = await fetch(`${baseUrl}/api/admin/condominios?${qs.toString()}`, {
       headers: {
         cookie: cookieHeader,
       },

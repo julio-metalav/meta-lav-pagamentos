@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { getServerBaseUrl } from "@/lib/http/getServerBaseUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ async function createGateway(condominioId: string, formData: FormData) {
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
-  const res = await fetch("/api/admin/gateways", {
+  const res = await fetch(`${await getServerBaseUrl()}/api/admin/gateways`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -48,7 +49,8 @@ export default async function AdminLojaGatewaysPage({ params }: Props) {
   let apiError: string | null = null;
 
   try {
-    const res = await fetch(`/api/admin/gateways?condominio_id=${encodeURIComponent(id)}`, {
+    const baseUrl = await getServerBaseUrl();
+    const res = await fetch(`${baseUrl}/api/admin/gateways?condominio_id=${encodeURIComponent(id)}`, {
       headers: { cookie: cookieHeader },
       cache: "no-store",
     });
