@@ -11,7 +11,7 @@ export async function getAdminSession(): Promise<AdminSession | null> {
   if (!secret) return null;
 
   const jar = await cookies();
-  const token = jar.get(COOKIE_NAME)?.value || "";
+  const token = jar.get(COOKIE_NAME)?.value || jar.get("admin_sm")?.value || "";
   if (!token) return null;
   const v = verifySession(token, secret);
   if (!v.ok) return null;
