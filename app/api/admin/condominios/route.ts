@@ -40,7 +40,10 @@ export async function GET(req: Request) {
     const sess = await requireAdminSession();
     if (!sess.ok) return jsonErrorCompat("Unauthorized", 401, { code: "unauthorized" });
     const hasPerm = await requirePermission(sess.user.id, "admin.condominios.read");
-    if (!hasPerm) return jsonErrorCompat("Forbidden", 403, { code: "forbidden" });
+    if (!hasPerm) {
+      console.warn("[admin/condominios GET] 403 forbidden", { user_id: sess.user.id, permission: "admin.condominios.read", hasPerm: false });
+      return jsonErrorCompat("Forbidden", 403, { code: "forbidden" });
+    }
 
     const { search, page, limit } = parsePagination(req.url);
     const from = (page - 1) * limit;
@@ -78,7 +81,10 @@ export async function POST(req: Request) {
     const sess = await requireAdminSession();
     if (!sess.ok) return jsonErrorCompat("Unauthorized", 401, { code: "unauthorized" });
     const hasPerm = await requirePermission(sess.user.id, "admin.condominios.write");
-    if (!hasPerm) return jsonErrorCompat("Forbidden", 403, { code: "forbidden" });
+    if (!hasPerm) {
+      console.warn("[admin/condominios POST] 403 forbidden", { user_id: sess.user.id, permission: "admin.condominios.write", hasPerm: false });
+      return jsonErrorCompat("Forbidden", 403, { code: "forbidden" });
+    }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
