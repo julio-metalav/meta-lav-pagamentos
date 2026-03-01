@@ -17,12 +17,13 @@ type Loja = {
 export default async function AdminLojasPage({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const sp = (await searchParams) ?? {};
   const page = Math.max(
     1,
     Number(
-      (typeof searchParams?.page === "string" && searchParams.page) || "1"
+      (typeof sp.page === "string" && sp.page) || "1"
     )
   );
   const limit = Math.min(
@@ -30,12 +31,12 @@ export default async function AdminLojasPage({
     Math.max(
       5,
       Number(
-        (typeof searchParams?.limit === "string" && searchParams.limit) || "20"
+        (typeof sp.limit === "string" && sp.limit) || "20"
       )
     )
   );
   const search =
-    (typeof searchParams?.search === "string" && searchParams.search.trim()) ||
+    (typeof sp.search === "string" && sp.search.trim()) ||
     "";
 
   const qs = new URLSearchParams();
@@ -157,7 +158,7 @@ export default async function AdminLojasPage({
                   <div>
                     <div className="font-semibold text-[var(--foreground)]">
                       <Link
-                        href={`/admin/lojas/${l.id}`}
+                        href={`/admin/lojas/${l.id}/dashboard`}
                         className="text-[var(--brand-primary)] hover:underline"
                       >
                         {l.nome}
@@ -167,10 +168,18 @@ export default async function AdminLojasPage({
                       {(l.cidade || "—")}, {(l.uf || "—")} •{" "}
                       {l.ativo ? "Ativa" : "Inativa"}
                       {l.codigo_condominio ? ` • Código: ${l.codigo_condominio}` : ""}
+                      {" • "}
+                      <Link
+                        href={`/admin/lojas/${l.id}`}
+                        className="text-[var(--text-secondary)] hover:underline"
+                        title="Abrir Setup/Wizard"
+                      >
+                        Setup
+                      </Link>
                     </div>
                   </div>
                   <Link
-                    href={`/admin/lojas/${l.id}`}
+                    href={`/admin/lojas/${l.id}/dashboard`}
                     className="px-3 py-2 rounded-lg border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--text-muted)]/20"
                   >
                     Abrir
