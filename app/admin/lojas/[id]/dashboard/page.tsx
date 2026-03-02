@@ -166,6 +166,8 @@ export default async function LojaDashboardPage({ params }: Props) {
         stale: boolean;
         price: number | null;
         hasScheduled: boolean;
+        posSerial: string | null;
+        gatewaySerial: string | null;
       }>;
     }
   >();
@@ -186,6 +188,8 @@ export default async function LojaDashboardPage({ params }: Props) {
       stale,
       price: p?.current_price_centavos ?? null,
       hasScheduled: !!p?.has_scheduled_price,
+      posSerial: m.pos_serial ?? null,
+      gatewaySerial: m.gateway_serial ?? null,
     };
 
     const g = groups.get(groupKey) || { key: groupKey, items: [] as any[] };
@@ -281,6 +285,8 @@ export default async function LojaDashboardPage({ params }: Props) {
                     <div>
                       <div className="font-medium">Lavadora</div>
                       <div className="text-sm text-[var(--text-secondary)]">{lav.ident || "—"}</div>
+                      <div className="text-xs text-[var(--text-secondary)]">POS: {lav.posSerial || "—"}</div>
+                      <div className="text-xs text-[var(--text-secondary)]">GW: {lav.gatewaySerial || "—"}</div>
                     </div>
                     <div className="flex items-center gap-2">
                       {lav.hasScheduled ? (
@@ -301,6 +307,8 @@ export default async function LojaDashboardPage({ params }: Props) {
                     <div>
                       <div className="font-medium">Secadora</div>
                       <div className="text-sm text-[var(--text-secondary)]">{sec.ident || "—"}</div>
+                      <div className="text-xs text-[var(--text-secondary)]">POS: {sec.posSerial || "—"}</div>
+                      <div className="text-xs text-[var(--text-secondary)]">GW: {sec.gatewaySerial || "—"}</div>
                     </div>
                     <div className="flex items-center gap-2">
                       {sec.hasScheduled ? (
