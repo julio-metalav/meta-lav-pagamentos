@@ -3,9 +3,9 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 export const dynamic = "force-dynamic";
 
 type PagamentosPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     status?: string;
-  };
+  }>;
 };
 
 type PagamentoRow = {
@@ -35,7 +35,8 @@ function formatCurrency(value: number | null) {
 
 export default async function PagamentosPage({ searchParams }: PagamentosPageProps) {
   const supabase = supabaseAdmin();
-  const statusFilter = searchParams?.status ? String(searchParams.status).trim() : null;
+  const sp = (await searchParams) ?? {};
+  const statusFilter = sp.status ? String(sp.status).trim() : null;
 
   let query = supabase
     .from("pagamentos")
