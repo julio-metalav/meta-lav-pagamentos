@@ -4,7 +4,10 @@ import { getServerBaseUrl } from "@/lib/http/getServerBaseUrl";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
 
 type DashboardResponse = {
   ok: true;
@@ -78,17 +81,25 @@ function statusPillClass(s: string) {
   return "pill border-[var(--danger)]/40 text-[var(--danger)] bg-[var(--danger)]/10";
 }
 
-function groupKeyFromIdent(ident: string | null) {
-  const s = String(ident ?? "").trim();
-  if (!s) return "—";
-  // Heurística: LAV-01 / SEC-01 => grupo "01"
-  const m = s.match(/^(LAV|SEC)[\s\-_]?(.*)$/i);
-  if (m && m[2]) return m[2].trim() || s;
-  return s;
+function typeLabel(tipo: string | null | undefined) {
+  const t = String(tipo || "").toLowerCase();
+  if (t === "lavadora") return "Lavadora";
+  if (t === "secadora") return "Secadora";
+  return "—";
 }
 
-export default async function LojaDashboardPage({ params }: Props) {
+function getFirstParam(v: string | string[] | undefined) {
+  return Array.isArray(v) ? v[0] : v;
+}
+
+export default async function LojaDashboardPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const sp = (await searchParams) ?? {};
+  const searchText = String(getFirstParam(sp.q) || "").trim();
+  const typeFilter = String(getFirstParam(sp.tipo) || "all").toLowerCase();
+  const statusFilter = String(getFirstParam(sp.status) || "all").toUpperCase();
+  const onlyErrors = String(getFirstParam(sp.only_errors) || "").toLowerCase();
+  const errorsOnlyEnabled = onlyErrors === "1" || onlyErrors === "true" || onlyErrors === "on";
 
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
@@ -150,54 +161,30 @@ export default async function LojaDashboardPage({ params }: Props) {
   }
 
   const loja = data.loja;
-  const byId = new Map(data.status_rows.map((r) => [r.maquina_id, r]));
-  const machines = data.machines.slice();
+  const statusById = new Map(data.status_rows.map((r) => [r.maquina_id, r]));
+  const priceById = data.prices_by_machine;
 
-  // Agrupa LAV/SEC por “máquina base”
-  const groups = new Map<
-    string,
-    {
-      key: string;
-      items: Array<{
-        id: string;
-        ident: string | null;
-        tipo: string;
-        status: "AVAILABLE" | "PENDING" | "IN_USE" | "ERROR";
-        stale: boolean;
-        price: number | null;
-        hasScheduled: boolean;
-        posSerial: string | null;
-        gatewaySerial: string | null;
-      }>;
-    }
-  >();
-
-  for (const m of machines) {
-    const tipo = String(m.tipo || "").toLowerCase();
-    const sr = byId.get(m.id);
-    const s = sr?.status || "AVAILABLE";
-    const stale = !!sr?.stale_pending;
-    const p = data.prices_by_machine[m.id];
-    const groupKey = groupKeyFromIdent(m.identificador_local);
-
-    const entry = {
-      id: m.id,
-      ident: m.identificador_local,
-      tipo: tipo || "—",
-      status: s,
-      stale,
-      price: p?.current_price_centavos ?? null,
-      hasScheduled: !!p?.has_scheduled_price,
-      posSerial: m.pos_serial ?? null,
-      gatewaySerial: m.gateway_serial ?? null,
+  const rows = data.machines.map((m) => {
+    const sr = statusById.get(m.id);
+    const pr = priceById[m.id] || { current_price_centavos: null, has_scheduled_price: false, current_rule_id: null };
+    return {
+      m,
+      sr,
+      pr,
+      status: sr?.status || "AVAILABLE",
+      stale: !!sr?.stale_pending,
     };
+  });
 
-    const g = groups.get(groupKey) || { key: groupKey, items: [] as any[] };
-    g.items.push(entry);
-    groups.set(groupKey, g);
-  }
-
-  const groupList = Array.from(groups.values()).sort((a, b) => a.key.localeCompare(b.key, "pt-BR"));
+  const searchNeedle = searchText.toLowerCase();
+  const rowsFiltered = rows.filter((row) => {
+    const ident = String(row.m.identificador_local || "").toLowerCase();
+    if (searchNeedle && !ident.includes(searchNeedle)) return false;
+    if (typeFilter !== "all" && String(row.m.tipo || "").toLowerCase() !== typeFilter) return false;
+    if (statusFilter !== "ALL" && row.status !== statusFilter) return false;
+    if (errorsOnlyEnabled && !(row.status === "ERROR" || row.stale)) return false;
+    return true;
+  });
 
   return (
     <div>
@@ -260,73 +247,197 @@ export default async function LojaDashboardPage({ params }: Props) {
         </div>
       </div>
 
-      {/* Grid por Máquina (grupo) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {groupList.map((g) => {
-          const lav = g.items.find((x) => x.tipo === "lavadora");
-          const sec = g.items.find((x) => x.tipo === "secadora");
+      {/* Filters */}
+      <form method="get" action={`/admin/lojas/${loja.id}/dashboard`} className="card p-3 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <input
+            type="text"
+            name="q"
+            defaultValue={searchText}
+            placeholder="Buscar por identificador..."
+            className="px-3 py-2 rounded-lg border border-[var(--border)] bg-transparent text-[var(--foreground)]"
+          />
+          <select
+            name="tipo"
+            defaultValue={typeFilter}
+            className="px-3 py-2 rounded-lg border border-[var(--border)] bg-transparent text-[var(--foreground)]"
+          >
+            <option value="all">Todos os tipos</option>
+            <option value="lavadora">Lavadora</option>
+            <option value="secadora">Secadora</option>
+          </select>
+          <select
+            name="status"
+            defaultValue={statusFilter}
+            className="px-3 py-2 rounded-lg border border-[var(--border)] bg-transparent text-[var(--foreground)]"
+          >
+            <option value="ALL">Todos os status</option>
+            <option value="AVAILABLE">Livre</option>
+            <option value="IN_USE">Em uso</option>
+            <option value="PENDING">Pendente</option>
+            <option value="ERROR">Erro</option>
+          </select>
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--border)] text-[var(--foreground)]">
+            <input type="checkbox" name="only_errors" defaultChecked={errorsOnlyEnabled} />
+            <span className="text-sm">Apenas erros</span>
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="px-3 py-2 rounded-lg border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--text-muted)]/20"
+            >
+              Filtrar
+            </button>
+            <Link
+              href={`/admin/lojas/${loja.id}/dashboard`}
+              className="px-3 py-2 rounded-lg text-[var(--text-secondary)] hover:underline"
+            >
+              Limpar
+            </Link>
+          </div>
+        </div>
+      </form>
 
-          return (
-            <div key={g.key} className="card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-semibold text-[var(--foreground)]">Máquina {g.key}</div>
-                <Link
-                  href={`/admin/lojas/${loja.id}`}
-                  className="text-sm text-[var(--text-secondary)] hover:underline"
-                  title="Abrir Setup/Wizard"
-                >
-                  Setup
-                </Link>
-              </div>
-
-              <div className="space-y-3">
-                {lav ? (
-                  <div className="flex items-center justify-between gap-3 border border-[var(--border)] rounded-lg p-3">
-                    <div>
-                      <div className="font-medium">Lavadora</div>
-                      <div className="text-sm text-[var(--text-secondary)]">{lav.ident || "—"}</div>
-                      <div className="text-xs text-[var(--text-secondary)]">POS: {lav.posSerial || "—"}</div>
-                      <div className="text-xs text-[var(--text-secondary)]">GW: {lav.gatewaySerial || "—"}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {lav.hasScheduled ? (
+      {/* Desktop table */}
+      <div className="hidden md:block card overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-[var(--text-secondary)]">
+            <tr className="border-b border-[var(--border)]">
+              <th className="px-3 py-2">Máquina</th>
+              <th className="px-3 py-2">Tipo</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Preço atual</th>
+              <th className="px-3 py-2">Agendado</th>
+              <th className="px-3 py-2">POS</th>
+              <th className="px-3 py-2">Gateway</th>
+              <th className="px-3 py-2">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rowsFiltered.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-3 py-6 text-center text-[var(--text-secondary)]">
+                  Nenhuma máquina encontrada para os filtros atuais.
+                </td>
+              </tr>
+            ) : (
+              rowsFiltered.map((row) => {
+                const isInactive = !row.m.ativa;
+                const currentPrice = row.pr.current_price_centavos ?? null;
+                return (
+                  <tr key={row.m.id} className={`border-b border-[var(--border)] ${isInactive ? "opacity-50 grayscale" : ""}`}>
+                    <td className="px-3 py-2 font-medium">{row.m.identificador_local || "—"}</td>
+                    <td className="px-3 py-2">{typeLabel(row.m.tipo)}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className={statusPillClass(row.status)}>{statusLabel(row.status)}</span>
+                        {row.stale ? (
+                          <span className="pill border-[var(--danger)]/40 text-[var(--danger)] bg-[var(--danger)]/10">STALE</span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      {currentPrice === null ? (
+                        <span className="pill border-[var(--warning)]/40 text-[var(--warning)] bg-[var(--warning)]/10">Sem preço</span>
+                      ) : (
+                        <span className="font-semibold">{formatBRLFromCents(currentPrice)}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.pr.has_scheduled_price ? (
                         <span className="pill border-[var(--meta-cyan)]/40 text-[var(--meta-cyan)] bg-[var(--meta-cyan)]/10">
-                          Preço agendado
+                          Agendado
                         </span>
-                      ) : null}
-                      <span className={statusPillClass(lav.status)}>{statusLabel(lav.status)}</span>
-                      <div className="text-sm font-semibold min-w-[96px] text-right">{formatBRLFromCents(lav.price)}</div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-sm text-[var(--text-secondary)]">Sem lavadora.</div>
-                )}
+                      ) : (
+                        <span className="text-[var(--text-secondary)]">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs">{row.m.pos_serial || "—"}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{row.m.gateway_serial || "—"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled
+                          className="px-2 py-1 rounded border border-[var(--border)] text-xs text-[var(--text-muted)] disabled:opacity-70"
+                          title="Edição de dispositivos em breve"
+                        >
+                          Editar dispositivos
+                        </button>
+                        <button
+                          disabled
+                          className="px-2 py-1 rounded border border-[var(--border)] text-xs text-[var(--text-muted)] disabled:opacity-70"
+                          title="Edição de preço em breve"
+                        >
+                          Editar preço
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
 
-                {sec ? (
-                  <div className="flex items-center justify-between gap-3 border border-[var(--border)] rounded-lg p-3">
-                    <div>
-                      <div className="font-medium">Secadora</div>
-                      <div className="text-sm text-[var(--text-secondary)]">{sec.ident || "—"}</div>
-                      <div className="text-xs text-[var(--text-secondary)]">POS: {sec.posSerial || "—"}</div>
-                      <div className="text-xs text-[var(--text-secondary)]">GW: {sec.gatewaySerial || "—"}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {sec.hasScheduled ? (
-                        <span className="pill border-[var(--meta-cyan)]/40 text-[var(--meta-cyan)] bg-[var(--meta-cyan)]/10">
-                          Preço agendado
-                        </span>
-                      ) : null}
-                      <span className={statusPillClass(sec.status)}>{statusLabel(sec.status)}</span>
-                      <div className="text-sm font-semibold min-w-[96px] text-right">{formatBRLFromCents(sec.price)}</div>
-                    </div>
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-3">
+        {rowsFiltered.length === 0 ? (
+          <div className="card p-4 text-sm text-[var(--text-secondary)]">Nenhuma máquina encontrada para os filtros atuais.</div>
+        ) : (
+          rowsFiltered.map((row) => {
+            const isInactive = !row.m.ativa;
+            const currentPrice = row.pr.current_price_centavos ?? null;
+            return (
+              <div key={row.m.id} className={`card p-4 ${isInactive ? "opacity-50 grayscale" : ""}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold">{row.m.identificador_local || "—"}</div>
+                    <div className="text-sm text-[var(--text-secondary)]">{typeLabel(row.m.tipo)}</div>
+                    <div className="text-xs text-[var(--text-secondary)]">POS: {row.m.pos_serial || "—"}</div>
+                    <div className="text-xs text-[var(--text-secondary)]">GW: {row.m.gateway_serial || "—"}</div>
                   </div>
-                ) : (
-                  <div className="text-sm text-[var(--text-secondary)]">Sem secadora.</div>
-                )}
+                  <div className="flex flex-col items-end gap-2">
+                    <span className={statusPillClass(row.status)}>{statusLabel(row.status)}</span>
+                    {row.stale ? (
+                      <span className="pill border-[var(--danger)]/40 text-[var(--danger)] bg-[var(--danger)]/10">STALE</span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between mt-3">
+                  <div>
+                    {currentPrice === null ? (
+                      <span className="pill border-[var(--warning)]/40 text-[var(--warning)] bg-[var(--warning)]/10">Sem preço</span>
+                    ) : (
+                      <span className="font-semibold">{formatBRLFromCents(currentPrice)}</span>
+                    )}
+                  </div>
+                  {row.pr.has_scheduled_price ? (
+                    <span className="pill border-[var(--meta-cyan)]/40 text-[var(--meta-cyan)] bg-[var(--meta-cyan)]/10">
+                      Agendado
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center gap-2 mt-3">
+                  <button
+                    disabled
+                    className="px-2 py-1 rounded border border-[var(--border)] text-xs text-[var(--text-muted)] disabled:opacity-70"
+                  >
+                    Editar dispositivos
+                  </button>
+                  <button
+                    disabled
+                    className="px-2 py-1 rounded border border-[var(--border)] text-xs text-[var(--text-muted)] disabled:opacity-70"
+                  >
+                    Editar preço
+                  </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );
