@@ -29,6 +29,16 @@ type MachineRow = {
   updated_at: string | null;
 };
 
+type GatewayRow = {
+  id: string;
+  serial: string | null;
+};
+
+type PosDeviceRow = {
+  id: string;
+  serial: string | null;
+};
+
 type CycleRow = {
   id: string;
   maquina_id: string | null;
@@ -155,6 +165,55 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (machinesErr) return jsonErrorCompat("Erro ao listar máquinas.", 500, { code: "db_error", extra: { details: machinesErr.message } });
     const machines = (machinesData || []) as MachineRow[];
     const machineIds = machines.map((m) => m.id).filter(Boolean);
+    const gatewayIds = Array.from(
+      new Set(
+        machines
+          .map((m) => m.gateway_id)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+    const posDeviceIds = Array.from(
+      new Set(
+        machines
+          .map((m) => m.pos_device_id)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+
+    const gatewaySerialById = new Map<string, string | null>();
+    const posSerialById = new Map<string, string | null>();
+
+    if (gatewayIds.length > 0) {
+      const { data: gatewaysData, error: gatewaysErr } = await sb
+        .from("gateways")
+        .select("id,serial")
+        .eq("tenant_id", tenantId)
+        .in("id", gatewayIds)
+        .limit(1000);
+      if (gatewaysErr) return jsonErrorCompat("Erro ao buscar gateways.", 500, { code: "db_error", extra: { details: gatewaysErr.message } });
+      for (const gw of (gatewaysData || []) as GatewayRow[]) {
+        gatewaySerialById.set(gw.id, gw.serial ?? null);
+      }
+    }
+
+    if (posDeviceIds.length > 0) {
+      const { data: posData, error: posErr } = await sb
+        .from("pos_devices")
+        .select("id,serial")
+        .eq("tenant_id", tenantId)
+        .in("id", posDeviceIds)
+        .limit(1000);
+      if (posErr) return jsonErrorCompat("Erro ao buscar POS devices.", 500, { code: "db_error", extra: { details: posErr.message } });
+      for (const pos of (posData || []) as PosDeviceRow[]) {
+        posSerialById.set(pos.id, pos.serial ?? null);
+      }
+    }
+
+    const machinesWithSerials = machines.map((machine) => ({
+      ...machine,
+      gateway_serial: machine.gateway_id ? gatewaySerialById.get(machine.gateway_id) ?? null : null,
+      pos_serial: machine.pos_device_id ? posSerialById.get(machine.pos_device_id) ?? null : null,
+    }));
 
     // 3) Último ciclo por máquina => status
     const lastCycleMap = new Map<string, CycleRow>();
@@ -279,7 +338,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       ok: true,
       loja: cond as CondominioRow,
       metrics,
-      machines,
+      machines: machinesWithSerials,
       status_rows: statusRows,
       prices_by_machine: priceByMachine,
     });

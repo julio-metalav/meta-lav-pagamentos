@@ -31,7 +31,9 @@ type DashboardResponse = {
     tipo: string | null;
     ativa: boolean | null;
     gateway_id: string | null;
+    gateway_serial: string | null;
     pos_device_id: string | null;
+    pos_serial: string | null;
     updated_at: string | null;
   }>;
   status_rows: Array<{
